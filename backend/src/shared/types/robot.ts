@@ -1,9 +1,9 @@
 export type RobotId =
   | 'scout-1'
   | 'lifter-2'
-  | 'carrier-3'
-  | 'inspector-4'
-  | 'dispatcher-5';
+  | 'scout-3'
+  | 'carrier-4'
+  | 'lifter-5';
 
 export type RobotBehaviorState =
   | 'IDLE'

@@ -8,7 +8,7 @@ import type { WsMessage, WsSessionStats, RobotId } from '../shared/types/index.j
 const log = pino({ level: 'info' });
 
 const WS_PORT = 8080;
-const ROBOT_IDS: RobotId[] = ['scout-1', 'lifter-2', 'carrier-3', 'inspector-4', 'dispatcher-5'];
+const ROBOT_IDS: RobotId[] = ['scout-1', 'lifter-2', 'scout-3', 'carrier-4', 'lifter-5'];
 const ROBOT_POLL_TIMEOUT_MS = 30_000;
 const ROBOT_POLL_INTERVAL_MS = 2_000;
 const TASK_REFILL_INTERVAL_MS = 15_000;
