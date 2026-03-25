@@ -1,4 +1,4 @@
-import type Redis from 'ioredis';
+import type { Redis } from 'ioredis';
 import type { RobotId, RobotEvent } from '../types/index.js';
 
 function eventChannel(robotId: RobotId): string {
@@ -17,8 +17,8 @@ export function subscribeToAllRobotEvents(
 ): void {
   subscriberClient.psubscribe('robot:*:events');
 
-  subscriberClient.on('pmessage', (_pattern, channel, message) => {
-    const robotId = channel.split(':')[1];
+  subscriberClient.on('pmessage', (_pattern: string, channel: string, message: string) => {
+    const robotId = channel.split(':')[1] ?? '';
     const event = JSON.parse(message) as RobotEvent;
     onEvent(robotId, event);
   });

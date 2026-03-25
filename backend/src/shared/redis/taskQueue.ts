@@ -1,4 +1,4 @@
-import type Redis from 'ioredis';
+import type { Redis } from 'ioredis';
 import type { Task } from '../types/index.js';
 
 const QUEUE_KEY = 'tasks:queue';

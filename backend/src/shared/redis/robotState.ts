@@ -1,4 +1,4 @@
-import type Redis from 'ioredis';
+import type { Redis } from 'ioredis';
 import type { RobotId, RobotState } from '../types/index.js';
 
 function stateKey(robotId: RobotId): string {
@@ -28,14 +28,14 @@ export async function getRobotState(redis: Redis, robotId: RobotId): Promise<Rob
   return {
     robotId: data.robotId as RobotId,
     position: {
-      x: parseFloat(data.positionX),
-      y: parseFloat(data.positionY),
-      z: parseFloat(data.positionZ),
+      x: parseFloat(data.positionX ?? '0'),
+      y: parseFloat(data.positionY ?? '0'),
+      z: parseFloat(data.positionZ ?? '0'),
     },
     currentTaskId: data.currentTaskId || null,
-    behaviorState: data.behaviorState as RobotState['behaviorState'],
-    reputationScore: parseFloat(data.reputationScore),
-    usdcBalance: data.usdcBalance,
-    lastUpdated: parseInt(data.lastUpdated),
+    behaviorState: (data.behaviorState ?? 'IDLE') as RobotState['behaviorState'],
+    reputationScore: parseFloat(data.reputationScore ?? '0'),
+    usdcBalance: data.usdcBalance ?? '0',
+    lastUpdated: parseInt(data.lastUpdated ?? '0'),
   };
 }

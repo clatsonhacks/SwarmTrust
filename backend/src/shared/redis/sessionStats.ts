@@ -1,4 +1,4 @@
-import type Redis from 'ioredis';
+import type { Redis } from 'ioredis';
 import type { SessionStats } from '../types/index.js';
 
 const STATS_KEY = 'session:stats';

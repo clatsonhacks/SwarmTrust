@@ -2,8 +2,10 @@
   "name": "swarmtrust",
   "version": "1.0.0",
   "description": "",
+  "type": "module",
   "main": "index.js",
   "scripts": {
+    "orchestrator": "tsx src/orchestrator/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -13,7 +15,9 @@
     "@types/express": "^5.0.6",
     "@types/node": "^25.5.0",
     "@types/ws": "^8.18.1",
-    "typescript": "^5.9.3"
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "wscat": "^6.1.0"
   },
   "dependencies": {
     "dotenv": "^17.3.1",
