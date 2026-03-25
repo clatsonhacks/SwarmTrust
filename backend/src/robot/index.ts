@@ -11,6 +11,7 @@ import { setRobotState } from '../shared/redis/robotState.js';
 import { popTask } from '../shared/redis/taskQueue.js';
 import { publishEvent } from '../shared/redis/pubsub.js';
 import { AgentLogger } from './agentLog.js';
+import { TaskDecomposer } from './decomposer.js';
 import type { RobotId, RobotState, Task } from '../shared/types/index.js';
 
 // ── Load manifest ──────────────────────────────────────────────────────────────
@@ -20,6 +21,10 @@ const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
 
 const log = pino({ level: 'info' }).child({ robotId });
 const agentLog = new AgentLogger(robotId);
+const decomposer = new TaskDecomposer(
+  process.env.GROQ_API_KEY ?? '',
+  manifest.compute.maxGroqCallsPerHour as number
+);
 
 // ── Init wallet client ─────────────────────────────────────────────────────────
 const rawKey = process.env[manifest.privateKeyEnv as string] ?? '';
@@ -109,15 +114,54 @@ async function runLoop(): Promise<void> {
 
         await updateState({ behaviorState: 'EXECUTING', currentTaskId: task.taskId });
 
-        // Simulate work
-        await new Promise((r) => setTimeout(r, 2000 + Math.random() * 1000));
+        // ── Decompose via Groq ──────────────────────────────────────────────
+        const { subtasks, fromCache, fromFallback, groqCallsRemaining } = await decomposer.decompose(
+          task.taskId,
+          task.description,
+          manifest.capabilities as string[]
+        );
+
+        log.info({ taskId: task.taskId, subTaskCount: subtasks.length, fromCache, fromFallback, groqCallsRemaining }, 'Task decomposed');
+        agentLog.append('TASK_DECOMPOSED', {
+          taskId: task.taskId,
+          subTaskCount: subtasks.length,
+          fromCache,
+          fromFallback,
+          groqCallsRemaining,
+          subtasks,
+        });
+
+        // ── Execute sub-tasks ───────────────────────────────────────────────
+        for (const subtask of subtasks) {
+          const canDo = (manifest.capabilities as string[]).includes(subtask.requiredCapability);
+
+          log.info(
+            { subTaskId: subtask.subTaskId, requiredCapability: subtask.requiredCapability, canDo },
+            canDo ? 'Executing sub-task myself' : 'Sub-task needs peer delegation'
+          );
+          agentLog.append('CAPABILITY_CHECK', {
+            subTaskId: subtask.subTaskId,
+            description: subtask.description,
+            requiredCapability: subtask.requiredCapability,
+            canDo,
+            action: canDo ? 'SELF_EXECUTE' : 'NEEDS_PEER',
+          });
+
+          if (canDo) {
+            agentLog.append('SUBTASK_EXECUTING', { subTaskId: subtask.subTaskId, description: subtask.description });
+            const behaviorState = subtask.requiredCapability === 'NAVIGATE' ? 'MOVING' : 'EXECUTING';
+            await updateState({ behaviorState, currentTaskId: task.taskId });
+            await new Promise((r) => setTimeout(r, subtask.estimatedDurationSecs * 100)); // scaled: 1s real = 10s sim
+          }
+          // Peer delegation will be implemented in Step 6
+        }
 
         // Complete task
         await updateState({ behaviorState: 'IDLE', currentTaskId: null });
         await redis.hincrby('session:stats', 'tasksCompleted', 1);
 
         log.info({ taskId: task.taskId }, 'Task complete');
-        agentLog.append('TASK_COMPLETE', { taskId: task.taskId });
+        agentLog.append('TASK_COMPLETE', { taskId: task.taskId, subTaskCount: subtasks.length, groqCallsUsed: decomposer.getCallCount() });
 
         await publishEvent(redis, {
           robotId,

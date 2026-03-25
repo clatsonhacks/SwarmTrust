@@ -4,6 +4,9 @@ import path from 'path';
 export type LogAction =
   | 'ROBOT_ONLINE'
   | 'TASK_RECEIVED'
+  | 'TASK_DECOMPOSED'
+  | 'CAPABILITY_CHECK'
+  | 'SUBTASK_EXECUTING'
   | 'TASK_COMPLETE'
   | 'STATE_CHANGED'
   | 'ERROR';
