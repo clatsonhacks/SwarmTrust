@@ -7,6 +7,7 @@
   "scripts": {
     "orchestrator": "tsx src/orchestrator/index.ts",
     "robot": "ROBOT_ID=scout-1 tsx src/robot/index.ts",
+    "register": "tsx scripts/register-agents.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -25,6 +26,7 @@
     "express": "^5.2.1",
     "groq-sdk": "^1.1.1",
     "ioredis": "^5.10.1",
+    "pinata": "^2.5.5",
     "pino": "^10.3.1",
     "viem": "^2.47.6",
     "ws": "^8.20.0"
