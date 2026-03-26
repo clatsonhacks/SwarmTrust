@@ -11,6 +11,7 @@ export type LogAction =
   | 'REPUTATION_CHECK'
   | 'PEER_SELECTED'
   | 'SUBTASK_ABORTED'
+  | 'PEER_DELEGATION'
   | 'TASK_COMPLETE'
   | 'STATE_CHANGED'
   | 'ERROR';

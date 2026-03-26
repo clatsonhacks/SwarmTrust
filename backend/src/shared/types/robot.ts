@@ -9,6 +9,7 @@ export type RobotBehaviorState =
   | 'IDLE'
   | 'MOVING'
   | 'EXECUTING'
+  | 'WAITING'
   | 'WAITING_PAYMENT';
 
 export interface RobotPosition {

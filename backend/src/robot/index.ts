@@ -6,12 +6,17 @@ import pino from 'pino';
 import { createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { baseSepolia } from 'viem/chains';
+import { paymentMiddleware, x402ResourceServer } from '@x402/express';
+import { registerExactEvmScheme } from '@x402/evm/exact/server';
 import { createRedisClient } from '../shared/redis/client.js';
 import { setRobotState } from '../shared/redis/robotState.js';
 import { popTask } from '../shared/redis/taskQueue.js';
 import { publishEvent } from '../shared/redis/pubsub.js';
 import { AgentLogger } from './agentLog.js';
 import { TaskDecomposer } from './decomposer.js';
+import { selectPeer } from './peerSelector.js';
+import { giveFeedback } from '../shared/blockchain/contracts.js';
+import { makeX402Fetch } from '../shared/x402/client.js';
 import type { RobotId, RobotState, Task } from '../shared/types/index.js';
 
 // ── Load manifest ──────────────────────────────────────────────────────────────
@@ -62,10 +67,15 @@ async function updateState(patch: Partial<RobotState>): Promise<void> {
   });
 }
 
-// ── Express health check ───────────────────────────────────────────────────────
+// ── x402 resource server (shared across all routes on this robot) ──────────────
+const resourceServer = registerExactEvmScheme(new x402ResourceServer());
+
+// ── Express server with x402-protected /task endpoint ─────────────────────────
 function startHttpServer(): void {
   const app = express();
+  app.use(express.json());
 
+  // Health check — free, no payment required
   app.get('/health', (_req, res) => {
     res.json({
       agentId: robotId,
@@ -75,6 +85,48 @@ function startHttpServer(): void {
       currentTaskId: state.currentTaskId,
       walletAddress: account.address,
     });
+  });
+
+  // Paid task delegation endpoint — requires 0.001 USDC per call
+  app.use(
+    paymentMiddleware(
+      {
+        'POST /task': {
+          accepts: {
+            scheme: 'exact',
+            network: 'eip155:84532',
+            payTo: account.address,
+            price: '$0.001',
+          },
+          description: `Delegate a subtask to ${manifest.name}`,
+        },
+      },
+      resourceServer,
+      { testnet: true }
+    )
+  );
+
+  app.post('/task', async (req, res) => {
+    const { subTaskId, description, requiredCapability, estimatedDurationSecs } = req.body as {
+      subTaskId: string;
+      description: string;
+      requiredCapability: string;
+      estimatedDurationSecs: number;
+    };
+
+    log.info({ subTaskId, requiredCapability }, 'Delegated subtask received');
+    agentLog.append('SUBTASK_EXECUTING', { subTaskId, description, delegated: true });
+
+    const behaviorState = requiredCapability === 'NAVIGATE' ? 'MOVING' : 'EXECUTING';
+    await updateState({ behaviorState });
+
+    // Simulate execution (scaled: 1 real sec = 100ms sim)
+    await new Promise((r) => setTimeout(r, (estimatedDurationSecs ?? 2) * 100));
+
+    await updateState({ behaviorState: 'IDLE', currentTaskId: null });
+    log.info({ subTaskId }, 'Delegated subtask complete');
+
+    res.json({ success: true, subTaskId, completedAt: Date.now() });
   });
 
   app.listen(manifest.payment.port, () => {
@@ -151,9 +203,52 @@ async function runLoop(): Promise<void> {
             agentLog.append('SUBTASK_EXECUTING', { subTaskId: subtask.subTaskId, description: subtask.description });
             const behaviorState = subtask.requiredCapability === 'NAVIGATE' ? 'MOVING' : 'EXECUTING';
             await updateState({ behaviorState, currentTaskId: task.taskId });
-            await new Promise((r) => setTimeout(r, subtask.estimatedDurationSecs * 100)); // scaled: 1s real = 10s sim
+            await new Promise((r) => setTimeout(r, subtask.estimatedDurationSecs * 100));
+          } else {
+            // ── Peer delegation via x402 ──────────────────────────────────────
+            const peer = await selectPeer(
+              redis, log, agentLog, robotId,
+              subtask.requiredCapability as import('./decomposer.js').Capability,
+              manifest.compute.trustThreshold as number
+            );
+
+            if (peer) {
+              try {
+                await updateState({ behaviorState: 'WAITING', currentTaskId: task.taskId });
+                const x402Fetch = makeX402Fetch(account);
+
+                const res = await x402Fetch(`${peer.endpoint}/task`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    subTaskId: subtask.subTaskId,
+                    description: subtask.description,
+                    requiredCapability: subtask.requiredCapability,
+                    estimatedDurationSecs: subtask.estimatedDurationSecs,
+                  }),
+                });
+
+                if (res.ok) {
+                  const paymentResponse = res.headers.get('PAYMENT-RESPONSE');
+                  agentLog.append('SUBTASK_EXECUTING', {
+                    subTaskId: subtask.subTaskId,
+                    delegatedTo: peer.agentId,
+                    paymentTx: paymentResponse ?? undefined,
+                  });
+                  log.info({ subTaskId: subtask.subTaskId, peer: peer.agentId }, 'Delegation succeeded, giving feedback');
+
+                  // Post-delegation on-chain feedback (positive)
+                  await giveFeedback(account, peer.tokenId, 80, peer.endpoint);
+                } else {
+                  log.warn({ subTaskId: subtask.subTaskId, status: res.status }, 'Peer returned error');
+                  agentLog.append('SUBTASK_ABORTED', { subTaskId: subtask.subTaskId, reason: `peer HTTP ${res.status}` });
+                }
+              } catch (err) {
+                log.error({ err, subTaskId: subtask.subTaskId }, 'Delegation failed');
+                agentLog.append('SUBTASK_ABORTED', { subTaskId: subtask.subTaskId, reason: (err as Error).message });
+              }
+            }
           }
-          // Peer delegation will be implemented in Step 6
         }
 
         // Complete task
