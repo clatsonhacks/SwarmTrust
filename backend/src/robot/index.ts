@@ -19,6 +19,8 @@ import { selectPeers } from './peerSelector.js';
 import { runSafetyChecks } from './safetyChecks.js';
 import { giveFeedback, getUsdcBalance, USDC_ADDRESS } from '../shared/blockchain/contracts.js';
 import { makeX402Fetch } from '../shared/x402/client.js';
+import { initStorachaClient, uploadWithRetry } from './storachaUploader.js';
+import type { Client as StorachaClientType } from '@storacha/client';
 import type { RobotId, RobotState, Task, ZoneId } from '../shared/types/index.js';
 
 // ── Load manifest ──────────────────────────────────────────────────────────────
@@ -78,6 +80,9 @@ let state: RobotState = {
 
 // ── Busy flag — prevents double-booking between queue loop and inbound delegations
 let isBusy = false;
+
+// ── Storacha client — null if env vars not set (uploads silently disabled) ─────
+let storachaClient: StorachaClientType | null = null;
 
 // ── Compute budget counters ────────────────────────────────────────────────────
 let redisOpsTotal = 0;
@@ -806,6 +811,28 @@ async function runLoop(): Promise<void> {
           computeBudget: agentLog.getBudget(),
         });
 
+        // ── Storacha upload ────────────────────────────────────────────────────
+        let uploadCid: string | undefined;
+        let uploadGatewayUrl: string | undefined;
+        if (storachaClient) {
+          const result = await uploadWithRetry(storachaClient, agentLog.getFilePath(), log);
+          if (result) {
+            uploadCid = result.cid;
+            uploadGatewayUrl = result.gatewayUrl;
+            log.info({ cid: result.cid, durationMs: result.durationMs, url: result.gatewayUrl }, 'Agent log uploaded to Storacha');
+
+            agentLog.append('LOG_UPLOADED', {
+              taskId: task.taskId,
+              cid: result.cid,
+              durationMs: result.durationMs,
+              gatewayUrl: result.gatewayUrl,
+            });
+
+            trackRedisOp();
+            await redis.hincrby('session:stats', 'logsUploaded', 1);
+          }
+        }
+
         trackRedisOp();
         await publishEvent(redis, {
           robotId,
@@ -818,6 +845,7 @@ async function runLoop(): Promise<void> {
             peersUsed: peersUsed.map((p) => p.agentId),
             totalUsdcPaid: totalUsdcPaid.toFixed(6),
             txHashes: allTxHashes,
+            ...(uploadCid ? { logCid: uploadCid, logUrl: uploadGatewayUrl } : {}),
           },
           timestamp: Date.now(),
         });
@@ -848,6 +876,8 @@ async function main(): Promise<void> {
   } catch {
     log.warn('Could not read USDC balance at startup');
   }
+
+  storachaClient = await initStorachaClient(robotId, log);
 
   startHttpServer();
   await registerAgent();

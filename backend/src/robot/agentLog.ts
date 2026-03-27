@@ -83,6 +83,10 @@ export class AgentLogger {
     return { ...this.log.computeBudget };
   }
 
+  getFilePath(): string {
+    return this.filePath;
+  }
+
   private flush(): void {
     fs.writeFileSync(this.filePath, JSON.stringify(this.log, null, 2));
   }
