@@ -601,7 +601,7 @@ async function runLoop(): Promise<void> {
           timestamp: Date.now(),
         });
 
-        // ── Upload log to Pinata (IPFS) ─────────────────────────────────────
+        // ── Upload log to Pinata (IPFS) ──────────────────────────────────────
         const uploadResult = await uploadLogToPinata(agentLog.getFilePath(), log);
         if (uploadResult) {
           agentLog.append('LOG_UPLOADED', {
