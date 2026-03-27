@@ -17,31 +17,50 @@ interface Waypoint {
   execTime: number
 }
 
-function getRoleWaypoints(type: string, cx: number, cz: number, s: number): Waypoint[] {
-  switch (type) {
-    case 'SCOUT': return [
-      { pos: [cx - s * 0.8, 0, cz - s * 0.8], task: 'Scanning intake zone',   execTime: 4.5 },
-      { pos: [cx + s * 0.7, 0, cz - s * 0.4], task: 'Inspecting pallet #A7',  execTime: 3.0 },
-      { pos: [cx + s * 0.2, 0, cz + s * 0.9], task: 'Logging manifest',        execTime: 4.0 },
-      { pos: [cx - s * 0.5, 0, cz + s * 0.5], task: 'Quality check',           execTime: 3.5 },
-      { pos: [cx + s * 0.9, 0, cz + s * 0.2], task: 'Flagging anomaly #12',    execTime: 5.0 },
-    ]
-    case 'LIFTER': return [
-      { pos: [cx + s * 0.6, 0, cz + s * 0.7], task: 'Lifting pallet → STORAGE', execTime: 5.0 },
-      { pos: [cx - s * 0.5, 0, cz - s * 0.6], task: 'Collecting crate #B3',     execTime: 3.5 },
-      { pos: [cx + s * 0.4, 0, cz - s * 0.8], task: 'Placing in staging',       execTime: 4.0 },
-      { pos: [cx - s * 0.8, 0, cz + s * 0.3], task: 'Moving heavy freight',     execTime: 5.5 },
-    ]
-    case 'CARRIER': return [
-      { pos: [cx, 0, cz + s * 0.9],            task: 'Carrying → DISPATCH',      execTime: 4.0 },
-      { pos: [cx - s * 0.7, 0, cz],            task: 'Loading transport cart',   execTime: 3.0 },
-      { pos: [cx + s * 0.6, 0, cz - s * 0.7], task: 'Route optimization',       execTime: 2.5 },
-      { pos: [cx, 0, cz - s * 0.9],            task: 'Final delivery',           execTime: 5.0 },
-    ]
-    default: return [
-      { pos: [cx, 0, cz], task: 'Standby', execTime: 3.0 },
-    ]
+function getWaypoints(type: string, dept: ZoneName, cx: number, cz: number, s: number): Waypoint[] {
+  // Each department gets unique tasks even if agent type overlaps
+  const W = (ox: number, oz: number, task: string, execTime: number): Waypoint =>
+    ({ pos: [cx + s * ox, 0, cz + s * oz], task, execTime })
+
+  const byDept: Partial<Record<ZoneName, Waypoint[]>> = {
+    INTAKE: [
+      W(-0.8, -0.8, 'Scanning incoming pallet',    4.5),
+      W( 0.7, -0.4, 'Logging manifest #A7',         3.0),
+      W( 0.2,  0.9, 'Barcode check — row 1',        4.0),
+      W(-0.5,  0.5, 'Flagging damaged crate',       3.5),
+      W( 0.9,  0.2, 'Receiving freight #12',        5.0),
+    ],
+    STORAGE: [
+      W(-0.7, -0.7, 'Auditing shelf B-4',           4.0),
+      W( 0.8, -0.3, 'Restacking row 7',             5.0),
+      W( 0.3,  0.8, 'Cycle count zone C',           3.5),
+      W(-0.6,  0.5, 'Moving overstock to bay 3',    5.5),
+      W( 0.5, -0.8, 'FIFO rotation — cold aisle',   4.5),
+    ],
+    STAGING: [
+      W(-0.7,  0.6, 'Order pick #ORD-882',          3.5),
+      W( 0.6, -0.7, 'Verifying SKU list',           4.0),
+      W( 0.0,  0.9, 'Packing station — line 2',     3.0),
+      W(-0.8, -0.5, 'QA scan before dispatch',      5.0),
+      W( 0.7,  0.4, 'Label print & apply',          2.5),
+    ],
+    DISPATCH: [
+      W( 0.0,  0.9, 'Loading dock 3 — truck ETA',   4.0),
+      W(-0.7,  0.0, 'Routing cart to bay 6',        3.0),
+      W( 0.6, -0.7, 'Final weight check',           3.5),
+      W( 0.0, -0.9, 'Handoff to carrier agent',     5.0),
+      W( 0.8,  0.5, 'Dispatch confirmation',        2.5),
+    ],
   }
+
+  // Fall back to generic role tasks if dept not matched
+  const generic: Record<string, Waypoint[]> = {
+    SCOUT:   [W(-0.7,-0.7,'Patrol sweep',3.5), W(0.7,0.4,'Area scan',4.0), W(-0.3,0.8,'Log report',3.0)],
+    LIFTER:  [W(0.6,0.6,'Lift cargo',5.0), W(-0.5,-0.6,'Collect item',3.5), W(0.4,-0.8,'Place load',4.0)],
+    CARRIER: [W(0,-0.9,'Carry to exit',4.0), W(-0.7,0,'Load cart',3.0), W(0.6,-0.6,'Final drop',5.0)],
+  }
+
+  return byDept[dept] ?? generic[type] ?? [W(0, 0, 'Standby', 3.0)]
 }
 
 // ── Department Agent — owns its own patrol simulation ─────────────────
@@ -76,8 +95,15 @@ function DepartmentAgent({
   const { scene, animations } = useGLTF(config.agentModel)
   const [clonedScene, agentFloorOffset] = useMemo(() => {
     const clone = SkeletonUtils.clone(scene)
+    // Normalize root transform so bbox reflects geometry only,
+    // not any scale/offset baked into the GLTF scene root (fixes flying on some models)
+    clone.position.set(0, 0, 0)
+    clone.rotation.set(0, 0, 0)
+    clone.scale.set(1, 1, 1)
+    clone.updateMatrixWorld(true)
     const box = new THREE.Box3().setFromObject(clone)
-    return [clone, -box.min.y]
+    // offset is in model-space; multiply by render scale (0.3) to get world units
+    return [clone, -box.min.y * 0.3]
   }, [scene])
   const { actions } = useAnimations(animations, clonedScene)
 
@@ -218,7 +244,7 @@ function DepartmentAgent({
 
   return (
     <group ref={groupRef} position={startPos}>
-      <primitive object={clonedScene} scale={0.3} position={[0, agentFloorOffset * 0.3, 0]} />
+      <primitive object={clonedScene} scale={0.3} position={[0, agentFloorOffset, 0]} />
       <mesh ref={ringRef} position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.2, 0.35, 32]} />
         <meshBasicMaterial color={agentColor} transparent opacity={0} side={THREE.DoubleSide} />
@@ -431,8 +457,8 @@ function DepartmentSceneContent({
   const getAgentPos = (agentId: string): [number, number, number] => {
     const idx = deptAgents.findIndex(a => a.id === agentId)
     if (idx === -1) return [warehouseBounds.cx, 0, warehouseBounds.cz]
-    const wps = getRoleWaypoints(
-      deptAgents[idx].type,
+    const wps = getWaypoints(
+      deptAgents[idx].type, department,
       warehouseBounds.cx, warehouseBounds.cz, warehouseBounds.spread
     )
     return wps[idx % wps.length]?.pos ?? [warehouseBounds.cx, 0, warehouseBounds.cz]
@@ -483,7 +509,7 @@ function DepartmentSceneContent({
       <WarehouseEnvironment department={department} />
 
       {deptAgents.map((agent, idx) => {
-        const wps   = getRoleWaypoints(agent.type, warehouseBounds.cx, warehouseBounds.cz, warehouseBounds.spread)
+        const wps   = getWaypoints(agent.type, department, warehouseBounds.cx, warehouseBounds.cz, warehouseBounds.spread)
         const speed = agent.type === 'SCOUT' ? 3.5 : agent.type === 'CARRIER' ? 4.0 : 2.8
         return (
           <DepartmentAgent
