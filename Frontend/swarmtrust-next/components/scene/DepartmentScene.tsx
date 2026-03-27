@@ -65,13 +65,14 @@ function getWaypoints(type: string, dept: ZoneName, cx: number, cz: number, s: n
 
 // ── Department Agent — owns its own patrol simulation ─────────────────
 function DepartmentAgent({
-  id, name, color, waypoints, speed, department, startIndex,
+  id, name, color, waypoints, speed, agentScale, department, startIndex,
 }: {
   id: string
   name: string
   color: string
   waypoints: Waypoint[]
   speed: number
+  agentScale: number
   department: ZoneName
   startIndex: number
 }) {
@@ -95,15 +96,33 @@ function DepartmentAgent({
   const { scene, animations } = useGLTF(config.agentModel)
   const [clonedScene, agentFloorOffset] = useMemo(() => {
     const clone = SkeletonUtils.clone(scene)
-    // Normalize root transform so bbox reflects geometry only,
-    // not any scale/offset baked into the GLTF scene root (fixes flying on some models)
+
+    // Normalize root
     clone.position.set(0, 0, 0)
     clone.rotation.set(0, 0, 0)
     clone.scale.set(1, 1, 1)
+
+    // Some GLBs (nora.glb) are exported from Blender without applying transforms,
+    // leaving an Armature child with scale=100 and a large translation offset.
+    // This makes the model appear 30× too large and 250 world units above the floor.
+    // Fix: any child node with an extreme scale gets reset to identity.
+    clone.traverse(child => {
+      const s = child.scale
+      if (Math.abs(s.x) > 10 || Math.abs(s.y) > 10 || Math.abs(s.z) > 10) {
+        child.scale.set(1, 1, 1)
+        child.position.set(0, 0, 0)
+      }
+    })
+
     clone.updateMatrixWorld(true)
     const box = new THREE.Box3().setFromObject(clone)
-    // offset is in model-space; multiply by render scale (0.3) to get world units
-    return [clone, -box.min.y * 0.3]
+
+    // Sanity-clamp: if the bbox is still unreasonable, just sit at floor
+    const floorOffset = (!box.isEmpty() && box.min.y > -200 && box.min.y < 200)
+      ? -box.min.y * agentScale
+      : 0
+
+    return [clone, floorOffset]
   }, [scene])
   const { actions } = useAnimations(animations, clonedScene)
 
@@ -244,7 +263,7 @@ function DepartmentAgent({
 
   return (
     <group ref={groupRef} position={startPos}>
-      <primitive object={clonedScene} scale={0.3} position={[0, agentFloorOffset, 0]} />
+      <primitive object={clonedScene} scale={agentScale} position={[0, agentFloorOffset, 0]} />
       <mesh ref={ringRef} position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.2, 0.35, 32]} />
         <meshBasicMaterial color={agentColor} transparent opacity={0} side={THREE.DoubleSide} />
@@ -509,7 +528,14 @@ function DepartmentSceneContent({
       <WarehouseEnvironment department={department} />
 
       {deptAgents.map((agent, idx) => {
-        const wps   = getWaypoints(agent.type, department, warehouseBounds.cx, warehouseBounds.cz, warehouseBounds.spread)
+        const agentScale = config.agentScale ?? 0.3
+        // Outdoor agents patrol outside the warehouse — use a larger spread
+        const spreadMul = config.outdoor ? 1.4 : 1.0
+        const wps   = getWaypoints(
+          agent.type, department,
+          warehouseBounds.cx, warehouseBounds.cz,
+          warehouseBounds.spread * spreadMul,
+        )
         const speed = agent.type === 'SCOUT' ? 3.5 : agent.type === 'CARRIER' ? 4.0 : 2.8
         return (
           <DepartmentAgent
@@ -519,6 +545,7 @@ function DepartmentSceneContent({
             color={agent.color}
             waypoints={wps}
             speed={speed}
+            agentScale={agentScale}
             department={department}
             startIndex={idx}
           />

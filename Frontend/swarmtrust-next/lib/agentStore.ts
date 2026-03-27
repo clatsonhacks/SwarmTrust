@@ -65,6 +65,7 @@ export const DEPARTMENT_CONFIGS: Record<ZoneName, DepartmentConfig> = {
     color: '#2a0e0e',
     glow: '#ff5566',
     agentIds: ['R4'],
+    outdoor: true,      // Patrol near the warehouse entrance
   },
 }
 
