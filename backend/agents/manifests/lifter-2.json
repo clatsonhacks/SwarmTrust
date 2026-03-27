@@ -1,0 +1,26 @@
+{
+  "agentId": "lifter-2",
+  "name": "SwarmTrust-Lifter-2",
+  "version": "1.0.0",
+  "type": "LIFTER",
+  "capabilities": ["NAVIGATE", "LIFT"],
+  "privateKeyEnv": "ROBOT_2_PRIVATE_KEY",
+  "payment": {
+    "endpoint": "http://localhost:3002",
+    "port": 3002
+  },
+  "compute": {
+    "maxConcurrentTasks": 1,
+    "trustThreshold": 80,
+    "maxGroqCallsPerHour": 50
+  },
+  "acceptedTokens": [
+    {
+      "symbol": "USDC",
+      "address": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      "network": "base-sepolia",
+      "chainId": 84532
+    }
+  ],
+  "networks": ["base-sepolia"]
+}

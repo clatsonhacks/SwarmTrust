@@ -1,0 +1,43 @@
+{
+  "name": "swarmtrust",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "orchestrator": "tsx src/orchestrator/index.ts",
+    "robot": "tsx src/robot/index.ts",
+    "robot:1": "ROBOT_ID=scout-1 tsx src/robot/index.ts",
+    "robot:2": "ROBOT_ID=lifter-2 tsx src/robot/index.ts",
+    "robot:3": "ROBOT_ID=scout-3 tsx src/robot/index.ts",
+    "robot:4": "ROBOT_ID=carrier-4 tsx src/robot/index.ts",
+    "robot:5": "ROBOT_ID=lifter-5 tsx src/robot/index.ts",
+    "register": "tsx scripts/register-agents.ts",
+    "fund-wallets": "tsx scripts/fund-wallets.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.5.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "wscat": "^6.1.0"
+  },
+  "dependencies": {
+    "@x402/evm": "^2.8.0",
+    "@x402/express": "^2.8.0",
+    "@x402/fetch": "^2.8.0",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "groq-sdk": "^1.1.1",
+    "ioredis": "^5.10.1",
+    "pinata": "^2.5.5",
+    "pino": "^10.3.1",
+    "viem": "^2.47.6",
+    "ws": "^8.20.0"
+  }
+}
