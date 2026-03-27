@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { PinataSDK } from 'pinata';
 
 export interface UploadResult {
   cid: string;
@@ -7,9 +8,9 @@ export interface UploadResult {
 }
 
 /**
- * Upload a JSON file to Pinata (IPFS pinning service).
+ * Upload a JSON file to Pinata (IPFS pinning service) using the Pinata SDK.
  * Returns the CID, upload duration, and a public gateway URL.
- * Returns null on permanent failure.
+ * Returns null on permanent failure — non-fatal, robot continues.
  */
 export async function uploadLogToPinata(
   logFilePath: string,
@@ -21,26 +22,18 @@ export async function uploadLogToPinata(
     return null;
   }
 
+  const pinata = new PinataSDK({ pinataJwt: jwt });
+  const fileName = logFilePath.split('/').pop() ?? 'agent-log.json';
+
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       const start = Date.now();
       const content = fs.readFileSync(logFilePath, 'utf-8');
+      const blob = new Blob([content], { type: 'application/json' });
+      const file = new File([blob], fileName, { type: 'application/json' });
 
-      const formData = new FormData();
-      formData.append('file', new Blob([content], { type: 'application/json' }), `${logFilePath.split('/').pop()}`);
-
-      const res = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${jwt}` },
-        body: formData,
-      });
-
-      if (!res.ok) {
-        throw new Error(`Pinata HTTP ${res.status}: ${await res.text()}`);
-      }
-
-      const json = (await res.json()) as { IpfsHash: string };
-      const cid = json.IpfsHash;
+      const result = await pinata.upload.public.file(file);
+      const cid = result.cid;
 
       return {
         cid,
