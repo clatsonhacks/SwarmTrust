@@ -11,7 +11,8 @@
 
 import { useRef, useEffect, useMemo, Suspense } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { useGLTF, Environment, Html, useAnimations } from '@react-three/drei'
+import { useGLTF, Environment, Html, useAnimations, OrbitControls } from '@react-three/drei'
+import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import * as THREE from 'three'
 import { SkeletonUtils } from 'three-stdlib'
 import { useAgentStore, DEPARTMENT_CONFIGS } from '@/lib/agentStore'
@@ -37,7 +38,14 @@ function DepartmentAgent({
 
   const config = DEPARTMENT_CONFIGS[department]
   const { scene, animations } = useGLTF(config.agentModel)
-  const clonedScene = useMemo(() => SkeletonUtils.clone(scene), [scene])
+
+  // Clone and compute foot offset so the model's bottom sits exactly at y=0
+  const [clonedScene, agentFloorOffset] = useMemo(() => {
+    const clone = SkeletonUtils.clone(scene)
+    const box = new THREE.Box3().setFromObject(clone)
+    return [clone, -box.min.y]
+  }, [scene])
+
   const { actions, mixer } = useAnimations(animations, clonedScene)
 
   // Log available animations on mount
@@ -149,12 +157,13 @@ function DepartmentAgent({
 
   return (
     <group ref={groupRef} position={localPosition}>
-      <primitive object={clonedScene} scale={0.15} />
-      <mesh ref={ringRef} position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[0.15, 0.25, 32]} />
+      {/* agentFloorOffset aligns the model's feet to y=0 of this group */}
+      <primitive object={clonedScene} scale={0.3} position={[0, agentFloorOffset * 0.3, 0]} />
+      <mesh ref={ringRef} position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.2, 0.35, 32]} />
         <meshBasicMaterial color={agentColor} transparent opacity={0} side={THREE.DoubleSide} />
       </mesh>
-      <Html position={[0, 0.6, 0]} center style={{ pointerEvents: 'none' }}>
+      <Html position={[0, 1.2, 0]} center style={{ pointerEvents: 'none' }}>
         <div className="agent-tag">
           <div className="agent-tag-name">{name}</div>
           <div className={`agent-tag-status ${statusClass}`}>{statusText}</div>
@@ -169,91 +178,142 @@ function WarehouseEnvironment({ department }: { department: ZoneName }) {
   const config = DEPARTMENT_CONFIGS[department]
   const { scene } = useGLTF(config.environmentModel)
 
-  const clonedScene = useMemo(() => {
+  // Compute bounding box so the model's floor lands exactly at world y=0,
+  // and make roof/upper meshes transparent so agents are visible from above.
+  const [clonedScene, floorOffset] = useMemo(() => {
     const clone = scene.clone()
+
+    const box = new THREE.Box3().setFromObject(clone)
+    const buildingHeight = box.max.y - box.min.y
+    // Anything in the top 35% of the building is treated as roof
+    const roofThreshold = box.min.y + buildingHeight * 0.65
+
     clone.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh) {
-        child.castShadow = true
-        child.receiveShadow = true
+      const mesh = child as THREE.Mesh
+      if (!mesh.isMesh) return
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+
+      // Check where this mesh sits vertically
+      const meshBox = new THREE.Box3().setFromObject(mesh)
+      if (meshBox.min.y > roofThreshold) {
+        // Clone the material so we don't mutate the shared original
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+        mesh.material = mats.map(m => {
+          const cloned = (m as THREE.Material).clone() as THREE.MeshStandardMaterial
+          cloned.transparent = true
+          cloned.opacity = 0.15
+          cloned.depthWrite = false
+          return cloned
+        })
+        if (!Array.isArray(mesh.material)) mesh.material = mesh.material
       }
     })
-    return clone
+
+    return [clone, -box.min.y]
   }, [scene])
 
-  // Warehouse positioned at ground level, agents work inside
+  // Wrap in a group so scale doesn't fight with the position offset
   return (
-    <primitive
-      object={clonedScene}
-      position={[0, 0, 0]}
-      scale={2}
-      rotation={[0, 0, 0]}
-    />
+    <group scale={2}>
+      <primitive
+        object={clonedScene}
+        position={[0, floorOffset, 0]}
+        rotation={[0, 0, 0]}
+      />
+    </group>
   )
 }
 
 // ── Main department scene content ────────────────────────────────────
-function DepartmentSceneContent({ department }: { department: ZoneName }) {
+function DepartmentSceneContent({
+  department,
+  resetRef,
+}: {
+  department: ZoneName
+  resetRef: React.MutableRefObject<(() => void) | null>
+}) {
   const { camera } = useThree()
-  const tick = useAgentStore(s => s.tick)
+  const controlsRef = useRef<OrbitControlsImpl>(null!)
+  const tick   = useAgentStore(s => s.tick)
   const agents = useAgentStore(s => s.agents)
-  const beams = useAgentStore(s => s.activeBeams)
+  const beams  = useAgentStore(s => s.activeBeams)
   const config = DEPARTMENT_CONFIGS[department]
-  const timeRef = useRef(0)
+
+  // Load the warehouse model here too so we can read its actual dimensions
+  const { scene: warehouseScene } = useGLTF(config.environmentModel)
+
+  // Compute warehouse world-space bounds (scale=2 applied in WarehouseEnvironment)
+  const warehouseBounds = useMemo(() => {
+    const box = new THREE.Box3().setFromObject(warehouseScene)
+    const center = new THREE.Vector3()
+    const size   = new THREE.Vector3()
+    box.getCenter(center)
+    box.getSize(size)
+    // WarehouseEnvironment wraps in <group scale={2}> and offsets by floorOffset
+    // so the floor is at world y=0. Scale all X/Z by 2 to get world coords.
+    return {
+      cx: center.x * 2,
+      cz: center.z * 2,
+      // interior safe radius: use the smaller of width/depth, pull back from walls
+      spread: Math.min(size.x, size.z) * 2 * 0.18,
+      // camera orbit radius and height relative to building size
+      camR: Math.max(size.x, size.z) * 2 * 0.55,
+      camH: size.y * 2 * 0.65,
+    }
+  }, [warehouseScene])
 
   const deptAgents = useMemo(() =>
     agents.filter(a => config.agentIds.includes(a.id)),
     [agents, config.agentIds]
   )
 
-  // TOP-DOWN camera view looking at workspace
-  useEffect(() => {
-    camera.position.set(0, 15, 8)
-    camera.lookAt(0, 0, 0)
-  }, [camera])
-
-  useFrame(({ clock }, delta) => {
-    tick(delta)
-    timeRef.current = clock.getElapsedTime()
-
-    // Top-down view with slight orbit
-    const t = clock.getElapsedTime()
-    const orbitRadius = 12
-    camera.position.x = Math.sin(t * 0.03) * orbitRadius
-    camera.position.z = Math.cos(t * 0.03) * orbitRadius
-    camera.position.y = 18  // High up for top-down view
-    camera.lookAt(0, 0, 0)
-  })
-
-  // Position agents inside the warehouse workspace
+  // Agents spread inside the actual warehouse footprint
   const getLocalPosition = (index: number): [number, number, number] => {
+    const { cx, cz, spread } = warehouseBounds
     const total = deptAgents.length
-    if (total === 1) return [0, 0, 0]
-
-    // Spread agents in workspace area - small radius to stay inside warehouse
+    if (total === 1) return [cx, 0, cz]
     const angle = (index / total) * Math.PI * 2
-    const radius = 1.5
     return [
-      Math.cos(angle) * radius,
-      0,  // On the ground
-      Math.sin(angle) * radius
+      cx + Math.cos(angle) * spread,
+      0,
+      cz + Math.sin(angle) * spread,
     ]
   }
 
-  const deptBeams = beams.filter(beam =>
-    config.agentIds.includes(beam.from) || config.agentIds.includes(beam.to)
+  // Set initial camera position and wire up the reset callback
+  useEffect(() => {
+    const { cx, cz, camR, camH } = warehouseBounds
+    camera.position.set(cx + camR * 0.7, camH, cz + camR * 0.7)
+    camera.lookAt(cx, 0, cz)
+
+    // Wait one frame for OrbitControls to pick up the new position, then save state
+    setTimeout(() => {
+      controlsRef.current?.saveState()
+      // Expose reset to the outer button
+      resetRef.current = () => controlsRef.current?.reset()
+    }, 100)
+  }, [camera, warehouseBounds, resetRef])
+
+  useFrame((_, delta) => {
+    tick(delta)
+  })
+
+  const deptBeams = beams.filter(b =>
+    config.agentIds.includes(b.from) || config.agentIds.includes(b.to)
   )
 
   const beamElements = deptBeams.map(beam => {
     const fromIdx = deptAgents.findIndex(a => a.id === beam.from)
-    const toIdx = deptAgents.findIndex(a => a.id === beam.to)
+    const toIdx   = deptAgents.findIndex(a => a.id === beam.to)
     if (fromIdx === -1 || toIdx === -1) return null
-    const fromPos = getLocalPosition(fromIdx)
-    const toPos = getLocalPosition(toIdx)
+    const fp = getLocalPosition(fromIdx)
+    const tp = getLocalPosition(toIdx)
     return (
       <TrustBeam
         key={beam.id}
-        from={[fromPos[0], 0.3, fromPos[2]]}
-        to={[toPos[0], 0.3, toPos[2]]}
+        from={[fp[0], 0.5, fp[2]]}
+        to={[tp[0], 0.5, tp[2]]}
         progress={beam.progress}
         color={config.glow}
       />
@@ -263,30 +323,42 @@ function DepartmentSceneContent({ department }: { department: ZoneName }) {
   return (
     <>
       <Environment preset="warehouse" />
-      <fog attach="fog" args={['#0a0c14', 30, 80]} />
+      <fog attach="fog" args={['#0a0c14', 40, 100]} />
 
-      {/* Lighting for top-down view */}
-      <ambientLight intensity={1.5} color="#ffffff" />
+      <ambientLight intensity={2} color="#ffffff" />
       <directionalLight
         position={[10, 25, 10]}
-        intensity={2}
+        intensity={2.5}
         castShadow
         shadow-mapSize={[2048, 2048]}
-        shadow-camera-far={60}
-        shadow-camera-left={-20}
-        shadow-camera-right={20}
-        shadow-camera-top={20}
-        shadow-camera-bottom={-20}
+        shadow-camera-far={80}
+        shadow-camera-left={-30}
+        shadow-camera-right={30}
+        shadow-camera-top={30}
+        shadow-camera-bottom={-30}
       />
-      {/* Accent lights for department color */}
-      <pointLight position={[0, 8, 0]} intensity={3} color={config.glow} distance={25} />
-      <pointLight position={[-8, 5, -8]} intensity={2} color={config.glow} distance={20} />
-      <pointLight position={[8, 5, 8]} intensity={2} color={config.glow} distance={20} />
+      <pointLight position={[warehouseBounds.cx, 6, warehouseBounds.cz]} intensity={4} color={config.glow} distance={30} />
+      <pointLight position={[warehouseBounds.cx - 6, 4, warehouseBounds.cz - 6]} intensity={2} color={config.glow} distance={20} />
+      <pointLight position={[warehouseBounds.cx + 6, 4, warehouseBounds.cz + 6]} intensity={2} color={config.glow} distance={20} />
 
-      {/* Warehouse environment model */}
+      <OrbitControls
+        ref={controlsRef}
+        makeDefault
+        target={[warehouseBounds.cx, 0, warehouseBounds.cz]}
+        enablePan
+        enableZoom
+        enableRotate
+        rotateSpeed={0.35}
+        zoomSpeed={0.5}
+        panSpeed={0.5}
+        minDistance={2}
+        maxDistance={warehouseBounds.camR * 1.8}
+        minPolarAngle={0.05}
+        maxPolarAngle={Math.PI * 0.80}
+      />
+
       <WarehouseEnvironment department={department} />
 
-      {/* Agents working inside */}
       {deptAgents.map((agent, idx) => (
         <DepartmentAgent
           key={agent.id}
@@ -307,8 +379,9 @@ function DepartmentSceneContent({ department }: { department: ZoneName }) {
 
 // ── Main export ──────────────────────────────────────────────────────
 export default function DepartmentScene({ department }: { department: ZoneName }) {
-  const setView = useAgentStore(s => s.setView)
-  const config = DEPARTMENT_CONFIGS[department]
+  const setView  = useAgentStore(s => s.setView)
+  const config   = DEPARTMENT_CONFIGS[department]
+  const resetRef = useRef<(() => void) | null>(null)
 
   return (
     <div className="dept-scene-wrap">
@@ -324,14 +397,39 @@ export default function DepartmentScene({ department }: { department: ZoneName }
         </div>
       </div>
 
+      {/* Reset camera button — always visible, bottom-right of canvas */}
+      <button
+        onClick={() => resetRef.current?.()}
+        style={{
+          position: 'absolute',
+          bottom: 20,
+          right: 20,
+          zIndex: 10,
+          background: 'rgba(0,0,0,0.6)',
+          color: config.glow,
+          border: `1px solid ${config.glow}`,
+          borderRadius: 6,
+          padding: '6px 14px',
+          fontSize: 12,
+          fontFamily: 'monospace',
+          cursor: 'pointer',
+          letterSpacing: '0.05em',
+        }}
+      >
+        ⌖ Reset View
+      </button>
+
       <Canvas
         shadows
         dpr={[1, 2]}
         gl={{ antialias: true }}
-        camera={{ fov: 50, near: 0.1, far: 500, position: [0, 18, 12] }}
+        camera={{ fov: 60, near: 0.1, far: 500, position: [0, 10, 15] }}
+        style={{ cursor: 'grab' }}
+        onMouseDown={e => (e.currentTarget.style.cursor = 'grabbing')}
+        onMouseUp={e => (e.currentTarget.style.cursor = 'grab')}
       >
         <Suspense fallback={null}>
-          <DepartmentSceneContent department={department} />
+          <DepartmentSceneContent department={department} resetRef={resetRef} />
         </Suspense>
       </Canvas>
     </div>
