@@ -1,4 +1,4 @@
-export type ZoneId = 'INTAKE' | 'STORAGE' | 'STAGING' | 'DISPATCH';
+export type ZoneId = 'INTAKE' | 'STORAGE' | 'PROCESSING' | 'PACKAGING' | 'DISPATCH';
 
 export interface ZoneLock {
   zoneId: ZoneId;
