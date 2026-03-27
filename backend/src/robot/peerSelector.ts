@@ -12,6 +12,7 @@ export interface PeerCandidate {
   tokenId: bigint;
   endpoint: string;
   reputationScore: number;
+  isIdle: boolean;
 }
 
 // ── 30-second in-memory reputation cache ─────────────────────────────────────
@@ -39,15 +40,15 @@ function loadTokens(): Record<string, string> {
   return JSON.parse(fs.readFileSync(p, 'utf-8'));
 }
 
-// ── Main peer selection algorithm ─────────────────────────────────────────────
-export async function selectPeer(
+// ── Peer selection — returns full ranked list for retry logic ─────────────────
+export async function selectPeers(
   redis: Redis,
   log: Logger,
   agentLog: AgentLogger,
   selfAgentId: RobotId,
   requiredCapability: Capability,
   trustThreshold: number
-): Promise<PeerCandidate | null> {
+): Promise<PeerCandidate[]> {
   const publicClient = makePublicClient();
   const tokens = loadTokens();
 
@@ -76,12 +77,11 @@ export async function selectPeer(
   log.info({ requiredCapability, candidatesFound: candidates.length }, 'Peer query');
 
   if (candidates.length === 0) {
-    agentLog.append('SUBTASK_ABORTED', { reason: 'no agents with required capability', requiredCapability });
-    return null;
+    return [];
   }
 
   // Step 2: Get reputation scores + filter by threshold
-  const qualified: PeerCandidate[] = [];
+  const qualified: Omit<PeerCandidate, 'isIdle'>[] = [];
 
   for (const { agentId, endpoint } of candidates) {
     const tokenIdStr = tokens[agentId];
@@ -107,33 +107,26 @@ export async function selectPeer(
 
   if (qualified.length === 0) {
     agentLog.append('SUBTASK_ABORTED', { reason: 'no peers above trust threshold', requiredCapability, threshold: trustThreshold });
-    return null;
+    return [];
   }
 
   // Step 3: Sort by reputation, tie-break by IDLE state
-  const withState = await Promise.all(
+  const ranked: PeerCandidate[] = await Promise.all(
     qualified.map(async (peer) => {
-      const state = await redis.hget(`robot:${peer.agentId}:state`, 'behaviorState');
-      return { ...peer, isIdle: state === 'IDLE' };
+      const behaviorState = await redis.hget(`robot:${peer.agentId}:state`, 'behaviorState');
+      return { ...peer, isIdle: behaviorState === 'IDLE' };
     })
   );
 
-  withState.sort((a, b) => {
+  ranked.sort((a, b) => {
     if (a.isIdle !== b.isIdle) return a.isIdle ? -1 : 1;
     return b.reputationScore - a.reputationScore;
   });
 
-  const selected = withState[0]!;
+  log.info(
+    { count: ranked.length, top: ranked[0]?.agentId, topScore: ranked[0]?.reputationScore },
+    'Peer candidates ranked'
+  );
 
-  agentLog.append('PEER_SELECTED', {
-    agentId: selected.agentId,
-    tokenId: selected.tokenId.toString(),
-    reputationScore: selected.reputationScore,
-    isIdle: selected.isIdle,
-    endpoint: selected.endpoint,
-  });
-
-  log.info({ agentId: selected.agentId, score: selected.reputationScore, isIdle: selected.isIdle }, 'Peer selected');
-
-  return selected;
+  return ranked;
 }

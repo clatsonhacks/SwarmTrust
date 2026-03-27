@@ -1,4 +1,4 @@
-import { createPublicClient, createWalletClient, http, toBytes, toHex, zeroHash, decodeEventLog } from 'viem';
+import { createPublicClient, createWalletClient, http, toBytes, toHex, keccak256, decodeEventLog } from 'viem';
 import type { PrivateKeyAccount } from 'viem/accounts';
 import { baseSepolia } from 'viem/chains';
 import { identityRegistryAbi } from '../abis/identityRegistry.js';
@@ -122,7 +122,7 @@ export async function giveFeedback(
     address: REPUTATION_REGISTRY,
     abi: reputationRegistryAbi,
     functionName: 'giveFeedback',
-    args: [agentId, BigInt(value), 0, FEEDBACK_TAG, '', endpoint, '', zeroHash],
+    args: [agentId, BigInt(value), 0, FEEDBACK_TAG, '', endpoint, '', keccak256(toBytes(`${agentId}:${value}:${endpoint}:${Date.now()}`))],
     chain: baseSepolia,
     account,
   });

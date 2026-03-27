@@ -3,9 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import express from 'express';
 import pino from 'pino';
-import { createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { baseSepolia } from 'viem/chains';
 import { paymentMiddleware, x402ResourceServer } from '@x402/express';
 import { registerExactEvmScheme } from '@x402/evm/exact/server';
 import { createRedisClient } from '../shared/redis/client.js';
@@ -14,7 +12,7 @@ import { popTask } from '../shared/redis/taskQueue.js';
 import { publishEvent } from '../shared/redis/pubsub.js';
 import { AgentLogger } from './agentLog.js';
 import { TaskDecomposer } from './decomposer.js';
-import { selectPeer } from './peerSelector.js';
+import { selectPeers } from './peerSelector.js';
 import { giveFeedback, getUsdcBalance, USDC_ADDRESS } from '../shared/blockchain/contracts.js';
 import { makeX402Fetch } from '../shared/x402/client.js';
 import type { RobotId, RobotState, Task } from '../shared/types/index.js';
@@ -31,15 +29,19 @@ const decomposer = new TaskDecomposer(
   manifest.compute.maxGroqCallsPerHour as number
 );
 
+// ── Zone positions for position simulation ─────────────────────────────────────
+const ZONE_POSITIONS: Record<string, { x: number; y: number; z: number }> = {
+  INTAKE:     { x: 0,   y: 0,  z: 0 },
+  STORAGE:    { x: 10,  y: 0,  z: 0 },
+  PROCESSING: { x: 10,  y: 10, z: 0 },
+  PACKAGING:  { x: 0,   y: 10, z: 0 },
+  DISPATCH:   { x: -10, y: 5,  z: 0 },
+};
+
 // ── Init wallet client ─────────────────────────────────────────────────────────
 const rawKey = process.env[manifest.privateKeyEnv as string] ?? '';
 const privateKey = (rawKey.startsWith('0x') ? rawKey : `0x${rawKey}`) as `0x${string}`;
 const account = privateKeyToAccount(privateKey);
-const walletClient = createWalletClient({
-  account,
-  chain: baseSepolia,
-  transport: http(process.env.BASE_SEPOLIA_RPC_URL),
-});
 
 // ── Redis ──────────────────────────────────────────────────────────────────────
 const redis = createRedisClient();
@@ -54,6 +56,9 @@ let state: RobotState = {
   usdcBalance: '0',
   lastUpdated: Date.now(),
 };
+
+// ── Busy flag — prevents double-booking between queue loop and inbound delegations
+let isBusy = false;
 
 async function updateState(patch: Partial<RobotState>): Promise<void> {
   state = { ...state, ...patch, lastUpdated: Date.now() };
@@ -100,10 +105,20 @@ function startHttpServer(): void {
       state: state.behaviorState,
       currentTaskId: state.currentTaskId,
       walletAddress: account.address,
+      busy: isBusy,
     });
   });
 
-  // Paid task delegation endpoint — requires 0.001 USDC per call
+  // Return 503 immediately if busy — before the x402 payment handshake fires
+  app.use('/task', (req, res, next) => {
+    if (req.method === 'POST' && isBusy) {
+      res.status(503).json({ error: 'Robot busy', robotId, state: state.behaviorState });
+      return;
+    }
+    next();
+  });
+
+  // Paid task delegation endpoint — requires 0.01 USDC per call
   app.use(
     paymentMiddleware(
       {
@@ -133,6 +148,7 @@ function startHttpServer(): void {
     log.info({ subTaskId, requiredCapability }, 'Delegated subtask received');
     agentLog.append('SUBTASK_EXECUTING', { subTaskId, description, delegated: true });
 
+    isBusy = true;
     const behaviorState = requiredCapability === 'NAVIGATE' ? 'MOVING' : 'EXECUTING';
     await updateState({ behaviorState });
 
@@ -140,6 +156,7 @@ function startHttpServer(): void {
     await new Promise((r) => setTimeout(r, (estimatedDurationSecs ?? 2) * 100));
 
     await updateState({ behaviorState: 'IDLE', currentTaskId: null });
+    isBusy = false;
     log.info({ subTaskId }, 'Delegated subtask complete');
 
     res.json({ success: true, subTaskId, completedAt: Date.now() });
@@ -176,13 +193,36 @@ async function runLoop(): Promise<void> {
         // Nothing in queue — stay IDLE
         await updateState({ behaviorState: 'IDLE', currentTaskId: null });
       } else {
-        // Task acquired
+        // ── Task acquired ──────────────────────────────────────────────────────
+        const taskStart = Date.now();
+        let subtasksSucceeded = 0;
+        let subtasksFailed = 0;
+        let totalUsdcPaid = 0;
+        const allTxHashes: string[] = [];
+        const peersUsed: Array<{ agentId: string; tokenId: string; success: boolean; txHash?: string }> = [];
+
         log.info({ taskId: task.taskId, description: task.description }, 'Task acquired');
         agentLog.append('TASK_RECEIVED', { taskId: task.taskId, description: task.description, priority: task.priority });
 
         await updateState({ behaviorState: 'EXECUTING', currentTaskId: task.taskId });
 
-        // ── Decompose via Groq ──────────────────────────────────────────────
+        await publishEvent(redis, {
+          robotId,
+          type: 'TASK_STARTED',
+          state: 'EXECUTING',
+          taskId: task.taskId,
+          payload: {
+            description: task.description,
+            priority: task.priority,
+            sourceZone: task.sourceZone,
+            destinationZone: task.destinationZone,
+          },
+          timestamp: Date.now(),
+        });
+
+        isBusy = true;
+
+        // ── Decompose via Groq ─────────────────────────────────────────────────
         const { subtasks, fromCache, fromFallback, groqCallsRemaining } = await decomposer.decompose(
           task.taskId,
           task.description,
@@ -199,7 +239,7 @@ async function runLoop(): Promise<void> {
           subtasks,
         });
 
-        // ── Execute sub-tasks ───────────────────────────────────────────────
+        // ── Execute sub-tasks ──────────────────────────────────────────────────
         for (const subtask of subtasks) {
           const canDo = (manifest.capabilities as string[]).includes(subtask.requiredCapability);
 
@@ -218,86 +258,303 @@ async function runLoop(): Promise<void> {
           if (canDo) {
             agentLog.append('SUBTASK_EXECUTING', { subTaskId: subtask.subTaskId, description: subtask.description });
             const behaviorState = subtask.requiredCapability === 'NAVIGATE' ? 'MOVING' : 'EXECUTING';
-            await updateState({ behaviorState, currentTaskId: task.taskId });
+
+            // Move toward destination zone on NAVIGATE subtasks
+            const targetZone = subtask.requiredCapability === 'NAVIGATE'
+              ? (task.destinationZone ?? task.sourceZone)
+              : undefined;
+            const targetPos = targetZone ? ZONE_POSITIONS[targetZone] : undefined;
+
+            await updateState({
+              behaviorState,
+              currentTaskId: task.taskId,
+              ...(targetPos ? { position: targetPos } : {}),
+            });
+
             await new Promise((r) => setTimeout(r, subtask.estimatedDurationSecs * 100));
+            subtasksSucceeded++;
           } else {
-            // ── Peer delegation via x402 ──────────────────────────────────────
-            const peer = await selectPeer(
+            // ── Peer delegation chain ──────────────────────────────────────────
+            await publishEvent(redis, {
+              robotId,
+              type: 'STATE_CHANGED',
+              state: 'WAITING',
+              taskId: task.taskId,
+              payload: {
+                step: `Querying registry for ${subtask.requiredCapability} peers`,
+                subTaskId: subtask.subTaskId,
+              },
+              timestamp: Date.now(),
+            });
+
+            const candidates = await selectPeers(
               redis, log, agentLog, robotId,
               subtask.requiredCapability as import('./decomposer.js').Capability,
               manifest.compute.trustThreshold as number
             );
 
-            if (peer) {
-              try {
-                await updateState({ behaviorState: 'WAITING', currentTaskId: task.taskId });
+            if (candidates.length === 0) {
+              log.warn({ subTaskId: subtask.subTaskId, requiredCapability: subtask.requiredCapability }, 'No qualified peers');
+              agentLog.append('SUBTASK_ABORTED', { subTaskId: subtask.subTaskId, reason: 'no qualified peers' });
+              subtasksFailed++;
+            } else {
+              let subtaskDone = false;
 
-                agentLog.append('PAYMENT_INITIATED', {
-                  peer: peer.agentId,
-                  peerAddress: peer.endpoint,
-                  amount: '0.01',
-                  asset: 'USDC',
-                  assetAddress: USDC_ADDRESS,
-                  network: 'base-sepolia',
-                });
-                log.info({ peer: peer.agentId, amount: '0.01 USDC' }, 'Initiating x402 payment for delegation');
+              for (const peer of candidates) {
+                if (subtaskDone) break;
 
-                const x402Fetch = makeX402Fetch(account);
-
-                const res = await x402Fetch(`${peer.endpoint}/task`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    subTaskId: subtask.subTaskId,
-                    description: subtask.description,
-                    requiredCapability: subtask.requiredCapability,
-                    estimatedDurationSecs: subtask.estimatedDurationSecs,
-                  }),
+                agentLog.append('PEER_SELECTED', {
+                  agentId: peer.agentId,
+                  tokenId: peer.tokenId.toString(),
+                  reputationScore: peer.reputationScore,
+                  isIdle: peer.isIdle,
+                  endpoint: peer.endpoint,
                 });
 
-                if (res.ok) {
-                  const paymentResponse = res.headers.get('PAYMENT-RESPONSE');
-                  agentLog.append('SUBTASK_EXECUTING', {
+                await publishEvent(redis, {
+                  robotId,
+                  type: 'STATE_CHANGED',
+                  state: 'WAITING',
+                  taskId: task.taskId,
+                  payload: {
+                    step: `Selected ${peer.agentId} (rep: ${peer.reputationScore}) for ${subtask.requiredCapability}`,
+                    peer: peer.agentId,
                     subTaskId: subtask.subTaskId,
-                    delegatedTo: peer.agentId,
-                    paymentTx: paymentResponse ?? undefined,
+                  },
+                  timestamp: Date.now(),
+                });
+
+                try {
+                  await updateState({ behaviorState: 'WAITING', currentTaskId: task.taskId });
+
+                  agentLog.append('PAYMENT_INITIATED', {
+                    peer: peer.agentId,
+                    peerAddress: peer.endpoint,
+                    amount: '0.01',
+                    asset: 'USDC',
+                    assetAddress: USDC_ADDRESS,
+                    network: 'base-sepolia',
+                    subTaskId: subtask.subTaskId,
                   });
-                  log.info({ subTaskId: subtask.subTaskId, peer: peer.agentId }, 'Delegation succeeded, giving feedback');
+                  log.info({ peer: peer.agentId, amount: '0.01 USDC', subTaskId: subtask.subTaskId }, 'Initiating x402 payment');
 
-                  // Decrement USDC balance for the 0.01 we just paid
-                  state.usdcBalance = Math.max(0, parseFloat(state.usdcBalance) - 0.01).toFixed(6);
-                  await setRobotState(redis, state);
+                  await publishEvent(redis, {
+                    robotId,
+                    type: 'PAYMENT_SENT',
+                    state: 'WAITING',
+                    taskId: task.taskId,
+                    payload: { peer: peer.agentId, amount: '0.01 USDC', subTaskId: subtask.subTaskId },
+                    timestamp: Date.now(),
+                  });
 
-                  // Post-delegation on-chain feedback (positive)
-                  await giveFeedback(account, peer.tokenId, 80, peer.endpoint);
-                } else {
-                  log.warn({ subTaskId: subtask.subTaskId, status: res.status }, 'Peer returned error');
-                  agentLog.append('SUBTASK_ABORTED', { subTaskId: subtask.subTaskId, reason: `peer HTTP ${res.status}` });
+                  const x402Fetch = makeX402Fetch(account);
+
+                  // 30-second hard timeout on the full delegation round-trip
+                  const controller = new AbortController();
+                  const timer = setTimeout(() => controller.abort(), 30_000);
+
+                  try {
+                    const res = await x402Fetch(`${peer.endpoint}/task`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        subTaskId: subtask.subTaskId,
+                        description: subtask.description,
+                        requiredCapability: subtask.requiredCapability,
+                        estimatedDurationSecs: subtask.estimatedDurationSecs,
+                      }),
+                      signal: controller.signal,
+                    });
+                    clearTimeout(timer);
+
+                    if (res.status === 503) {
+                      // Peer is busy — no payment made, try next candidate
+                      log.info({ peer: peer.agentId, subTaskId: subtask.subTaskId }, 'Peer busy (503), trying next');
+                      agentLog.append('PEER_DELEGATION', {
+                        subTaskId: subtask.subTaskId,
+                        peer: peer.agentId,
+                        outcome: 'BUSY',
+                      });
+                      continue;
+                    }
+
+                    if (res.ok) {
+                      const paymentResponse = res.headers.get('PAYMENT-RESPONSE');
+                      agentLog.append('SUBTASK_EXECUTING', {
+                        subTaskId: subtask.subTaskId,
+                        delegatedTo: peer.agentId,
+                        paymentTx: paymentResponse ?? undefined,
+                      });
+                      log.info({ subTaskId: subtask.subTaskId, peer: peer.agentId }, 'Delegation succeeded');
+
+                      // Debit USDC balance for this delegation
+                      state.usdcBalance = Math.max(0, parseFloat(state.usdcBalance) - 0.01).toFixed(6);
+                      await setRobotState(redis, state);
+                      totalUsdcPaid += 0.01;
+
+                      // Mark success BEFORE feedback — payment already settled, delegation is done
+                      subtaskDone = true;
+                      subtasksSucceeded++;
+
+                      // Positive on-chain feedback — isolated so a revert doesn't abort the delegation
+                      let feedbackTxHash: `0x${string}` | undefined;
+                      try {
+                        feedbackTxHash = await giveFeedback(account, peer.tokenId, 80, peer.endpoint);
+                        allTxHashes.push(feedbackTxHash);
+                      } catch (fbErr) {
+                        log.warn({ fbErr, peer: peer.agentId }, 'Positive feedback write failed (delegation still succeeded)');
+                      }
+
+                      await publishEvent(redis, {
+                        robotId,
+                        type: 'REPUTATION_UPDATED',
+                        state: 'WAITING',
+                        taskId: task.taskId,
+                        payload: {
+                          peer: peer.agentId,
+                          feedbackValue: 80,
+                          txHash: feedbackTxHash,
+                          subTaskId: subtask.subTaskId,
+                        },
+                        timestamp: Date.now(),
+                      });
+
+                      peersUsed.push({
+                        agentId: peer.agentId,
+                        tokenId: peer.tokenId.toString(),
+                        success: true,
+                        ...(feedbackTxHash !== undefined ? { txHash: feedbackTxHash } : {}),
+                      });
+                    } else {
+                      // Peer accepted payment but execution failed — negative feedback
+                      log.warn({ subTaskId: subtask.subTaskId, status: res.status, peer: peer.agentId }, 'Peer execution failed');
+                      agentLog.append('PEER_DELEGATION', {
+                        subTaskId: subtask.subTaskId,
+                        peer: peer.agentId,
+                        outcome: 'FAILED',
+                        httpStatus: res.status,
+                      });
+
+                      state.usdcBalance = Math.max(0, parseFloat(state.usdcBalance) - 0.01).toFixed(6);
+                      await setRobotState(redis, state);
+                      totalUsdcPaid += 0.01;
+
+                      const feedbackTxHash = await giveFeedback(account, peer.tokenId, -50, peer.endpoint);
+                      allTxHashes.push(feedbackTxHash);
+
+                      await publishEvent(redis, {
+                        robotId,
+                        type: 'REPUTATION_UPDATED',
+                        state: 'WAITING',
+                        taskId: task.taskId,
+                        payload: {
+                          peer: peer.agentId,
+                          feedbackValue: -50,
+                          txHash: feedbackTxHash,
+                          subTaskId: subtask.subTaskId,
+                        },
+                        timestamp: Date.now(),
+                      });
+
+                      peersUsed.push({
+                        agentId: peer.agentId,
+                        tokenId: peer.tokenId.toString(),
+                        success: false,
+                        txHash: feedbackTxHash,
+                      });
+                      // Try next candidate
+                    }
+                  } catch (fetchErr) {
+                    clearTimeout(timer);
+                    const isTimeout = (fetchErr as Error).name === 'AbortError';
+                    log.error({ fetchErr, subTaskId: subtask.subTaskId, peer: peer.agentId, isTimeout }, 'Delegation request failed');
+                    agentLog.append('PEER_DELEGATION', {
+                      subTaskId: subtask.subTaskId,
+                      peer: peer.agentId,
+                      outcome: isTimeout ? 'TIMEOUT' : 'PAYMENT_ERROR',
+                      reason: (fetchErr as Error).message,
+                    });
+
+                    if (isTimeout) {
+                      // Timeout: peer failed to respond — give negative feedback
+                      try {
+                        const feedbackTxHash = await giveFeedback(account, peer.tokenId, -50, peer.endpoint);
+                        allTxHashes.push(feedbackTxHash);
+                        peersUsed.push({
+                          agentId: peer.agentId,
+                          tokenId: peer.tokenId.toString(),
+                          success: false,
+                          txHash: feedbackTxHash,
+                        });
+                      } catch {
+                        log.warn({ peer: peer.agentId }, 'Could not write negative feedback after timeout');
+                      }
+                    }
+                    // Payment error: no feedback (payment did not go through)
+                    // Continue to next candidate in either case
+                  }
+                } catch (outerErr) {
+                  log.error({ outerErr, subTaskId: subtask.subTaskId, peer: peer.agentId }, 'Unexpected delegation error');
+                  agentLog.append('SUBTASK_ABORTED', {
+                    subTaskId: subtask.subTaskId,
+                    reason: (outerErr as Error).message,
+                  });
                 }
-              } catch (err) {
-                log.error({ err, subTaskId: subtask.subTaskId }, 'Delegation failed');
-                agentLog.append('SUBTASK_ABORTED', { subTaskId: subtask.subTaskId, reason: (err as Error).message });
+              }
+
+              if (!subtaskDone) {
+                agentLog.append('SUBTASK_ABORTED', {
+                  subTaskId: subtask.subTaskId,
+                  reason: 'all peer candidates failed or unavailable',
+                });
+                subtasksFailed++;
               }
             }
           }
         }
 
-        // Complete task
+        isBusy = false;
+
+        // ── Task summary ───────────────────────────────────────────────────────
+        const executionTimeMs = Date.now() - taskStart;
+        const taskStatus =
+          subtasksFailed === 0 ? 'SUCCESS' :
+          subtasksSucceeded === 0 ? 'FAILED' : 'PARTIALLY_FAILED';
+
         await updateState({ behaviorState: 'IDLE', currentTaskId: null });
         await redis.hincrby('session:stats', 'tasksCompleted', 1);
 
-        log.info({ taskId: task.taskId }, 'Task complete');
-        agentLog.append('TASK_COMPLETE', { taskId: task.taskId, subTaskCount: subtasks.length, groqCallsUsed: decomposer.getCallCount() });
+        log.info({ taskId: task.taskId, taskStatus, executionTimeMs, subtasksSucceeded, subtasksFailed }, 'Task complete');
+        agentLog.append('TASK_COMPLETE', {
+          taskId: task.taskId,
+          status: taskStatus,
+          executionTimeMs,
+          subTaskCount: subtasks.length,
+          subtasksSucceeded,
+          subtasksFailed,
+          peersUsed,
+          totalUsdcPaid: totalUsdcPaid.toFixed(6),
+          onChainTxHashes: allTxHashes,
+          groqCallsUsed: decomposer.getCallCount(),
+        });
 
         await publishEvent(redis, {
           robotId,
           type: 'TASK_COMPLETED',
           state: 'IDLE',
           taskId: task.taskId,
+          payload: {
+            status: taskStatus,
+            executionTimeMs,
+            peersUsed: peersUsed.map((p) => p.agentId),
+            totalUsdcPaid: totalUsdcPaid.toFixed(6),
+            txHashes: allTxHashes,
+          },
           timestamp: Date.now(),
         });
       }
     } catch (err) {
+      isBusy = false;
       log.error({ err }, 'Loop error');
       agentLog.append('ERROR', { message: (err as Error).message });
     }
