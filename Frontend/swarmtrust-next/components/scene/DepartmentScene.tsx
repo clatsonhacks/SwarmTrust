@@ -1,15 +1,6 @@
 'use client'
 
-/**
- * DepartmentScene.tsx
- * ─────────────────────────────────────────────────────────────
- * Per-department 3D scene with:
- *   • Warehouse environment (camera inside)
- *   • Department-specific agent models with proper animations
- *   • Agents working inside the warehouse
- */
-
-import { useRef, useEffect, useMemo, Suspense } from 'react'
+import { useRef, useEffect, useMemo, useState, Suspense } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, Environment, Html, useAnimations, OrbitControls } from '@react-three/drei'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
@@ -19,100 +10,80 @@ import { useAgentStore, DEPARTMENT_CONFIGS } from '@/lib/agentStore'
 import type { ZoneName, AgentState } from '@/lib/types'
 import TrustBeam from './TrustBeam'
 
-// ── Department Agent with proper animations ─────────────────────────
+// ── Role-specific waypoints ───────────────────────────────────────────
+interface Waypoint {
+  pos: [number, number, number]
+  task: string
+  execTime: number
+}
+
+function getRoleWaypoints(type: string, cx: number, cz: number, s: number): Waypoint[] {
+  switch (type) {
+    case 'SCOUT': return [
+      { pos: [cx - s * 0.8, 0, cz - s * 0.8], task: 'Scanning intake zone',   execTime: 4.5 },
+      { pos: [cx + s * 0.7, 0, cz - s * 0.4], task: 'Inspecting pallet #A7',  execTime: 3.0 },
+      { pos: [cx + s * 0.2, 0, cz + s * 0.9], task: 'Logging manifest',        execTime: 4.0 },
+      { pos: [cx - s * 0.5, 0, cz + s * 0.5], task: 'Quality check',           execTime: 3.5 },
+      { pos: [cx + s * 0.9, 0, cz + s * 0.2], task: 'Flagging anomaly #12',    execTime: 5.0 },
+    ]
+    case 'LIFTER': return [
+      { pos: [cx + s * 0.6, 0, cz + s * 0.7], task: 'Lifting pallet → STORAGE', execTime: 5.0 },
+      { pos: [cx - s * 0.5, 0, cz - s * 0.6], task: 'Collecting crate #B3',     execTime: 3.5 },
+      { pos: [cx + s * 0.4, 0, cz - s * 0.8], task: 'Placing in staging',       execTime: 4.0 },
+      { pos: [cx - s * 0.8, 0, cz + s * 0.3], task: 'Moving heavy freight',     execTime: 5.5 },
+    ]
+    case 'CARRIER': return [
+      { pos: [cx, 0, cz + s * 0.9],            task: 'Carrying → DISPATCH',      execTime: 4.0 },
+      { pos: [cx - s * 0.7, 0, cz],            task: 'Loading transport cart',   execTime: 3.0 },
+      { pos: [cx + s * 0.6, 0, cz - s * 0.7], task: 'Route optimization',       execTime: 2.5 },
+      { pos: [cx, 0, cz - s * 0.9],            task: 'Final delivery',           execTime: 5.0 },
+    ]
+    default: return [
+      { pos: [cx, 0, cz], task: 'Standby', execTime: 3.0 },
+    ]
+  }
+}
+
+// ── Department Agent — owns its own patrol simulation ─────────────────
 function DepartmentAgent({
-  id, name, color, localPosition, state, department, index
+  id, name, color, waypoints, speed, department, startIndex,
 }: {
   id: string
   name: string
   color: string
-  localPosition: [number, number, number]
-  state: AgentState
+  waypoints: Waypoint[]
+  speed: number
   department: ZoneName
-  index: number
+  startIndex: number
 }) {
   const groupRef = useRef<THREE.Group>(null!)
-  const ringRef = useRef<THREE.Mesh>(null!)
+  const ringRef  = useRef<THREE.Mesh>(null!)
   const agentColor = useMemo(() => new THREE.Color(color), [color])
-  const currentAction = useRef<string | null>(null)
+  const currentAnimRef = useRef<string | null>(null)
 
+  // Simulation state — all in refs so useFrame doesn't re-render React
+  const wpIndexRef    = useRef(startIndex % Math.max(waypoints.length, 1))
+  const phaseRef      = useRef<'IDLE' | 'MOVING' | 'EXECUTING'>('IDLE')
+  const timerRef      = useRef(startIndex * 2.0 + 1.0)
+  const execDurRef    = useRef(0)   // full duration of current exec, for progress %
+
+  // React state only for the HTML overlay (updates only on phase transitions)
+  const [displayState, setDisplayState] = useState<AgentState>('IDLE')
+  const [displayTask,  setDisplayTask]  = useState(waypoints[wpIndexRef.current]?.task ?? '')
+
+  // Load agent model
   const config = DEPARTMENT_CONFIGS[department]
   const { scene, animations } = useGLTF(config.agentModel)
-
-  // Clone and compute foot offset so the model's bottom sits exactly at y=0
   const [clonedScene, agentFloorOffset] = useMemo(() => {
     const clone = SkeletonUtils.clone(scene)
     const box = new THREE.Box3().setFromObject(clone)
     return [clone, -box.min.y]
   }, [scene])
+  const { actions } = useAnimations(animations, clonedScene)
 
-  const { actions, mixer } = useAnimations(animations, clonedScene)
-
-  // Log available animations on mount
+  // Shadows
   useEffect(() => {
-    const animNames = Object.keys(actions)
-    console.log(`[${name}] Available animations:`, animNames)
-    console.log(`[${name}] Animation details:`, animations.map(a => ({
-      name: a.name,
-      duration: a.duration,
-      tracks: a.tracks.length
-    })))
-  }, [actions, animations, name])
-
-  // Play animations based on agent state
-  useEffect(() => {
-    const animNames = Object.keys(actions)
-    if (animNames.length === 0) return
-
-    // Find best animation for current state
-    let targetAnim: string | null = null
-
-    const findAnim = (keywords: string[]) => {
-      for (const keyword of keywords) {
-        const found = animNames.find(n => n.toLowerCase().includes(keyword.toLowerCase()))
-        if (found) return found
-      }
-      return null
-    }
-
-    switch (state) {
-      case 'MOVING':
-        targetAnim = findAnim(['walk', 'run', 'move', 'locomotion', 'forward', 'Walk'])
-        break
-      case 'EXECUTING':
-        targetAnim = findAnim(['jump', 'work', 'action', 'interact', 'small Jump', 'Jump'])
-        break
-      case 'MEETING':
-        targetAnim = findAnim(['jump', 'talk', 'wave', 'small Jump', 'idle'])
-        break
-      case 'IDLE':
-      default:
-        targetAnim = findAnim(['idle', 'stand', 'wait', 'Walk', 'walk'])
-        break
-    }
-
-    // Fallback to first animation if no match
-    if (!targetAnim && animNames.length > 0) {
-      targetAnim = animNames[0]
-    }
-
-    // Play the animation
-    if (targetAnim && targetAnim !== currentAction.current) {
-      // Fade out current
-      if (currentAction.current && actions[currentAction.current]) {
-        actions[currentAction.current]?.fadeOut(0.3)
-      }
-      // Fade in new
-      if (actions[targetAnim]) {
-        actions[targetAnim]?.reset().fadeIn(0.3).play()
-      }
-      currentAction.current = targetAnim
-    }
-  }, [state, actions])
-
-  // Setup shadows
-  useEffect(() => {
-    clonedScene.traverse((child) => {
+    clonedScene.traverse(child => {
       if ((child as THREE.Mesh).isMesh) {
         child.castShadow = true
         child.receiveShadow = true
@@ -120,22 +91,114 @@ function DepartmentAgent({
     })
   }, [clonedScene])
 
-  // Animation for agent movement and effects
-  useFrame(({ clock }) => {
+  // Drive animations from displayState
+  useEffect(() => {
+    const names = Object.keys(actions)
+    if (!names.length) return
+    const find = (...kws: string[]) =>
+      kws.map(k => names.find(n => n.toLowerCase().includes(k.toLowerCase()))).find(Boolean) ?? null
+
+    const target =
+      displayState === 'MOVING'    ? find('walk', 'run', 'locomotion', 'forward') :
+      displayState === 'EXECUTING' ? find('work', 'action', 'interact', 'jump') :
+                                     find('idle', 'stand', 'wait', 'walk')
+    const anim = target ?? names[0]
+    if (anim && anim !== currentAnimRef.current) {
+      if (currentAnimRef.current) actions[currentAnimRef.current]?.fadeOut(0.3)
+      actions[anim]?.reset().fadeIn(0.3).play()
+      currentAnimRef.current = anim
+    }
+  }, [displayState, actions])
+
+  useFrame(({ clock }, delta) => {
+    if (!groupRef.current || !waypoints.length) return
     const t = clock.getElapsedTime()
 
-    // Rotate agent to face movement direction or center
-    if (groupRef.current) {
-      const targetRotation = Math.atan2(-localPosition[0], -localPosition[2])
-      groupRef.current.rotation.y = THREE.MathUtils.lerp(
-        groupRef.current.rotation.y,
-        targetRotation,
-        0.05
-      )
+    if (phaseRef.current === 'IDLE') {
+      timerRef.current -= delta
+      if (timerRef.current <= 0) {
+        wpIndexRef.current = (wpIndexRef.current + 1) % waypoints.length
+        phaseRef.current = 'MOVING'
+        setDisplayState('MOVING')
+        setDisplayTask(waypoints[wpIndexRef.current].task)
+      }
+
+    } else if (phaseRef.current === 'MOVING') {
+      const wp = waypoints[wpIndexRef.current]
+      const pos = groupRef.current.position
+      const dx = wp.pos[0] - pos.x
+      const dz = wp.pos[2] - pos.z
+      const dist = Math.sqrt(dx * dx + dz * dz)
+
+      if (dist > 0.12) {
+        const step = speed * delta
+        pos.x += (dx / dist) * step
+        pos.z += (dz / dist) * step
+        groupRef.current.rotation.y = THREE.MathUtils.lerp(
+          groupRef.current.rotation.y,
+          Math.atan2(dx, dz),
+          0.12,
+        )
+        // Walk bob — up/down + slight side sway
+        groupRef.current.position.y = Math.abs(Math.sin(t * speed * 1.8)) * 0.05
+        groupRef.current.rotation.z = Math.sin(t * speed * 1.8) * 0.04
+      } else {
+        pos.x = wp.pos[0]
+        pos.z = wp.pos[2]
+        phaseRef.current  = 'EXECUTING'
+        timerRef.current  = wp.execTime
+        execDurRef.current = wp.execTime
+        // Reset any walk lean before starting exec
+        groupRef.current.rotation.x = 0
+        groupRef.current.rotation.z = 0
+        setDisplayState('EXECUTING')
+      }
+
+    } else if (phaseRef.current === 'EXECUTING') {
+      timerRef.current -= delta
+      const progress = 1 - timerRef.current / Math.max(execDurRef.current, 0.001)
+
+      // ── Procedural lift cycle ──────────────────────────────────────
+      // 0–25 %  : approach — lean forward, squat down
+      // 25–55 % : strain up — rise, straighten, micro-shake
+      // 55–80 % : hold high — slight sway while carrying
+      // 80–100%  : place down — lower, straighten fully
+      if (progress < 0.25) {
+        const p = progress / 0.25
+        groupRef.current.position.y = -p * 0.12
+        groupRef.current.rotation.x =  p * 0.28   // lean forward
+      } else if (progress < 0.55) {
+        const p = (progress - 0.25) / 0.30
+        groupRef.current.position.y = -0.12 + p * 0.22   // rise up
+        groupRef.current.rotation.x = 0.28 - p * 0.20   // straighten
+        // micro-shake — straining under weight
+        groupRef.current.position.x += (Math.random() - 0.5) * 0.003
+        groupRef.current.position.z += (Math.random() - 0.5) * 0.003
+      } else if (progress < 0.80) {
+        const p = (progress - 0.55) / 0.25
+        groupRef.current.position.y = 0.10 + Math.sin(p * Math.PI * 2) * 0.02   // sway while holding
+        groupRef.current.rotation.x = 0.08 - p * 0.05
+        groupRef.current.rotation.z = Math.sin(p * Math.PI * 3) * 0.04           // side rock
+      } else {
+        const p = (progress - 0.80) / 0.20
+        groupRef.current.position.y = 0.10 - p * 0.10   // place down
+        groupRef.current.rotation.x = THREE.MathUtils.lerp(groupRef.current.rotation.x, 0, 0.1)
+        groupRef.current.rotation.z = THREE.MathUtils.lerp(groupRef.current.rotation.z, 0, 0.1)
+      }
+
+      if (timerRef.current <= 0) {
+        // Clean reset
+        groupRef.current.position.y = 0
+        groupRef.current.rotation.x = 0
+        groupRef.current.rotation.z = 0
+        phaseRef.current = 'IDLE'
+        timerRef.current = 0.5 + Math.random() * 1.5
+        setDisplayState('IDLE')
+      }
     }
 
-    // Ring pulse when executing
-    if (state === 'EXECUTING' && ringRef.current) {
+    // Ring pulse on EXECUTING
+    if (phaseRef.current === 'EXECUTING' && ringRef.current) {
       ringRef.current.scale.setScalar(1 + Math.sin(t * 3) * 0.3)
       ;(ringRef.current.material as THREE.MeshBasicMaterial).opacity = 0.5 + Math.sin(t * 3) * 0.2
     } else if (ringRef.current) {
@@ -143,21 +206,18 @@ function DepartmentAgent({
     }
   })
 
-  const statusText =
-    state === 'IDLE' ? 'IDLE' :
-    state === 'MOVING' ? 'MOVING' :
-    state === 'EXECUTING' ? 'EXEC' :
-    state === 'MEETING' ? 'SCRUM' :
-    state === 'DELEGATING' ? 'DELEGATING' : state
-
   const statusClass =
-    state === 'MOVING' ? 'moving' :
-    state === 'EXECUTING' ? 'executing' :
-    state === 'MEETING' ? 'meeting' : ''
+    displayState === 'MOVING'    ? 'moving'    :
+    displayState === 'EXECUTING' ? 'executing' : ''
+
+  const statusText =
+    displayState === 'MOVING'    ? 'MOVING'    :
+    displayState === 'EXECUTING' ? 'EXEC'      : 'IDLE'
+
+  const startPos = waypoints[startIndex % waypoints.length]?.pos ?? [0, 0, 0]
 
   return (
-    <group ref={groupRef} position={localPosition}>
-      {/* agentFloorOffset aligns the model's feet to y=0 of this group */}
+    <group ref={groupRef} position={startPos}>
       <primitive object={clonedScene} scale={0.3} position={[0, agentFloorOffset * 0.3, 0]} />
       <mesh ref={ringRef} position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.2, 0.35, 32]} />
@@ -167,6 +227,21 @@ function DepartmentAgent({
         <div className="agent-tag">
           <div className="agent-tag-name">{name}</div>
           <div className={`agent-tag-status ${statusClass}`}>{statusText}</div>
+          {displayState !== 'IDLE' && (
+            <div style={{
+              fontSize: 9,
+              color: '#fff',
+              fontWeight: 'bold',
+              marginTop: 2,
+              maxWidth: 120,
+              textAlign: 'center',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}>
+              {displayTask}
+            </div>
+          )}
         </div>
       </Html>
     </group>
@@ -178,50 +253,128 @@ function WarehouseEnvironment({ department }: { department: ZoneName }) {
   const config = DEPARTMENT_CONFIGS[department]
   const { scene } = useGLTF(config.environmentModel)
 
-  // Compute bounding box so the model's floor lands exactly at world y=0,
-  // and make roof/upper meshes transparent so agents are visible from above.
   const [clonedScene, floorOffset] = useMemo(() => {
     const clone = scene.clone()
-
     const box = new THREE.Box3().setFromObject(clone)
     const buildingHeight = box.max.y - box.min.y
-    // Anything in the top 35% of the building is treated as roof
     const roofThreshold = box.min.y + buildingHeight * 0.65
 
-    clone.traverse((child) => {
+    clone.traverse(child => {
       const mesh = child as THREE.Mesh
       if (!mesh.isMesh) return
       mesh.castShadow = true
       mesh.receiveShadow = true
 
-      // Check where this mesh sits vertically
       const meshBox = new THREE.Box3().setFromObject(mesh)
       if (meshBox.min.y > roofThreshold) {
-        // Clone the material so we don't mutate the shared original
         const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
         mesh.material = mats.map(m => {
-          const cloned = (m as THREE.Material).clone() as THREE.MeshStandardMaterial
-          cloned.transparent = true
-          cloned.opacity = 0.15
-          cloned.depthWrite = false
-          return cloned
+          const c = (m as THREE.Material).clone() as THREE.MeshStandardMaterial
+          c.transparent = true
+          c.opacity = 0.15
+          c.depthWrite = false
+          return c
         })
-        if (!Array.isArray(mesh.material)) mesh.material = mesh.material
       }
     })
 
     return [clone, -box.min.y]
   }, [scene])
 
-  // Wrap in a group so scale doesn't fight with the position offset
   return (
     <group scale={2}>
-      <primitive
-        object={clonedScene}
-        position={[0, floorOffset, 0]}
-        rotation={[0, 0, 0]}
-      />
+      <primitive object={clonedScene} position={[0, floorOffset, 0]} rotation={[0, 0, 0]} />
     </group>
+  )
+}
+
+// ── Animated lighting ────────────────────────────────────────────────
+function AnimatedLights({ cx, cz, glowColor }: { cx: number; cz: number; glowColor: string }) {
+  const ambientRef    = useRef<THREE.AmbientLight>(null!)
+  const overheadRef   = useRef<THREE.PointLight>(null!)
+  const accentARef    = useRef<THREE.PointLight>(null!)
+  const accentBRef    = useRef<THREE.PointLight>(null!)
+  const sweepRef      = useRef<THREE.SpotLight>(null!)
+  const sweepTargetRef= useRef<THREE.Object3D>(null!)
+
+  // Flicker state — occasional random drop-outs like old fluorescents
+  const flickerTimer  = useRef(0)
+  const flickerActive = useRef(false)
+
+  useFrame(({ clock }, delta) => {
+    const t = clock.getElapsedTime()
+
+    // ── Overhead flicker (fluorescent tube effect) ──
+    flickerTimer.current -= delta
+    if (flickerTimer.current <= 0) {
+      flickerActive.current = Math.random() < 0.15  // 15% chance of a flicker event
+      flickerTimer.current  = flickerActive.current
+        ? 0.05 + Math.random() * 0.1   // short flicker duration
+        : 2.5  + Math.random() * 4.0   // longer quiet period
+    }
+    if (overheadRef.current) {
+      const base = 3.5
+      if (flickerActive.current) {
+        // Rapid stutter
+        overheadRef.current.intensity = Math.random() < 0.5 ? 0.4 : base * 1.3
+      } else {
+        // Gentle hum variation (subtle sine + tiny noise)
+        overheadRef.current.intensity = base + Math.sin(t * 1.3) * 0.3 + Math.sin(t * 7.1) * 0.1
+      }
+    }
+
+    // ── Ambient breathe — very subtle ──
+    if (ambientRef.current) {
+      ambientRef.current.intensity = 1.6 + Math.sin(t * 0.4) * 0.2
+    }
+
+    // ── Accent lights pulse (opposite phase so they trade off) ──
+    if (accentARef.current) {
+      accentARef.current.intensity = 1.8 + Math.sin(t * 0.9) * 0.8
+    }
+    if (accentBRef.current) {
+      accentBRef.current.intensity = 1.8 + Math.sin(t * 0.9 + Math.PI) * 0.8
+    }
+
+    // ── Sweeping spotlight — slow orbit around the warehouse floor ──
+    if (sweepRef.current && sweepTargetRef.current) {
+      const r = 7
+      sweepRef.current.position.x = cx + Math.cos(t * 0.18) * r
+      sweepRef.current.position.z = cz + Math.sin(t * 0.18) * r
+      sweepRef.current.position.y = 8
+      sweepTargetRef.current.position.set(cx, 0, cz)
+      sweepRef.current.intensity = 2.5 + Math.sin(t * 0.6) * 0.8
+    }
+  })
+
+  return (
+    <>
+      <ambientLight ref={ambientRef} intensity={1.6} color="#e8eef5" />
+
+      {/* Main overhead — flickering fluorescent */}
+      <pointLight ref={overheadRef} position={[cx, 6, cz]} intensity={3.5} color="#fff8e7" distance={32} decay={1.5} />
+
+      {/* Accent pair — pulsing out of phase */}
+      <pointLight ref={accentARef} position={[cx - 6, 4, cz - 6]} intensity={1.8} color={glowColor} distance={22} decay={2} />
+      <pointLight ref={accentBRef} position={[cx + 6, 4, cz + 6]} intensity={1.8} color={glowColor} distance={22} decay={2} />
+
+      {/* Sweeping spotlight */}
+      <spotLight
+        ref={sweepRef}
+        position={[cx + 7, 8, cz]}
+        intensity={2.5}
+        color={glowColor}
+        angle={0.35}
+        penumbra={0.6}
+        distance={30}
+        decay={1.8}
+        castShadow={false}
+      />
+      <object3D ref={sweepTargetRef} position={[cx, 0, cz]} />
+
+      {/* Static fill light from opposite corner so shadows aren't pitch black */}
+      <pointLight position={[cx - 8, 5, cz + 8]} intensity={0.8} color="#3a4a6a" distance={25} decay={2} />
+    </>
   )
 }
 
@@ -235,122 +388,92 @@ function DepartmentSceneContent({
 }) {
   const { camera } = useThree()
   const controlsRef = useRef<OrbitControlsImpl>(null!)
-  const tick   = useAgentStore(s => s.tick)
-  const agents = useAgentStore(s => s.agents)
-  const beams  = useAgentStore(s => s.activeBeams)
-  const config = DEPARTMENT_CONFIGS[department]
+  const tick    = useAgentStore(s => s.tick)
+  const agents  = useAgentStore(s => s.agents)
+  const beams   = useAgentStore(s => s.activeBeams)
+  const config  = DEPARTMENT_CONFIGS[department]
 
-  // Load the warehouse model here too so we can read its actual dimensions
   const { scene: warehouseScene } = useGLTF(config.environmentModel)
 
-  // Compute warehouse world-space bounds (scale=2 applied in WarehouseEnvironment)
   const warehouseBounds = useMemo(() => {
     const box = new THREE.Box3().setFromObject(warehouseScene)
     const center = new THREE.Vector3()
     const size   = new THREE.Vector3()
     box.getCenter(center)
     box.getSize(size)
-    // WarehouseEnvironment wraps in <group scale={2}> and offsets by floorOffset
-    // so the floor is at world y=0. Scale all X/Z by 2 to get world coords.
     return {
-      cx: center.x * 2,
-      cz: center.z * 2,
-      // interior safe radius: use the smaller of width/depth, pull back from walls
+      cx:     center.x * 2,
+      cz:     center.z * 2,
       spread: Math.min(size.x, size.z) * 2 * 0.18,
-      // camera orbit radius and height relative to building size
-      camR: Math.max(size.x, size.z) * 2 * 0.55,
-      camH: size.y * 2 * 0.65,
+      camR:   Math.max(size.x, size.z) * 2 * 0.55,
+      camH:   size.y * 2 * 0.65,
     }
   }, [warehouseScene])
 
   const deptAgents = useMemo(() =>
     agents.filter(a => config.agentIds.includes(a.id)),
-    [agents, config.agentIds]
+    [agents, config.agentIds],
   )
 
-  // Agents spread inside the actual warehouse footprint
-  const getLocalPosition = (index: number): [number, number, number] => {
-    const { cx, cz, spread } = warehouseBounds
-    const total = deptAgents.length
-    if (total === 1) return [cx, 0, cz]
-    const angle = (index / total) * Math.PI * 2
-    return [
-      cx + Math.cos(angle) * spread,
-      0,
-      cz + Math.sin(angle) * spread,
-    ]
-  }
-
-  // Set initial camera position and wire up the reset callback
   useEffect(() => {
     const { cx, cz, camR, camH } = warehouseBounds
     camera.position.set(cx + camR * 0.7, camH, cz + camR * 0.7)
     camera.lookAt(cx, 0, cz)
-
-    // Wait one frame for OrbitControls to pick up the new position, then save state
     setTimeout(() => {
       controlsRef.current?.saveState()
-      // Expose reset to the outer button
       resetRef.current = () => controlsRef.current?.reset()
     }, 100)
   }, [camera, warehouseBounds, resetRef])
 
-  useFrame((_, delta) => {
-    tick(delta)
-  })
+  useFrame((_, delta) => { tick(delta) })
 
-  const deptBeams = beams.filter(b =>
-    config.agentIds.includes(b.from) || config.agentIds.includes(b.to)
-  )
-
-  const beamElements = deptBeams.map(beam => {
-    const fromIdx = deptAgents.findIndex(a => a.id === beam.from)
-    const toIdx   = deptAgents.findIndex(a => a.id === beam.to)
-    if (fromIdx === -1 || toIdx === -1) return null
-    const fp = getLocalPosition(fromIdx)
-    const tp = getLocalPosition(toIdx)
-    return (
-      <TrustBeam
-        key={beam.id}
-        from={[fp[0], 0.5, fp[2]]}
-        to={[tp[0], 0.5, tp[2]]}
-        progress={beam.progress}
-        color={config.glow}
-      />
+  // Beams between agents in this dept
+  const getAgentPos = (agentId: string): [number, number, number] => {
+    const idx = deptAgents.findIndex(a => a.id === agentId)
+    if (idx === -1) return [warehouseBounds.cx, 0, warehouseBounds.cz]
+    const wps = getRoleWaypoints(
+      deptAgents[idx].type,
+      warehouseBounds.cx, warehouseBounds.cz, warehouseBounds.spread
     )
-  })
+    return wps[idx % wps.length]?.pos ?? [warehouseBounds.cx, 0, warehouseBounds.cz]
+  }
+
+  const beamElements = beams
+    .filter(b => config.agentIds.includes(b.from) || config.agentIds.includes(b.to))
+    .map(beam => {
+      const fp = getAgentPos(beam.from)
+      const tp = getAgentPos(beam.to)
+      return (
+        <TrustBeam
+          key={beam.id}
+          from={[fp[0], 0.5, fp[2]]}
+          to={[tp[0], 0.5, tp[2]]}
+          progress={beam.progress}
+          color={config.glow}
+        />
+      )
+    })
 
   return (
     <>
       <Environment preset="warehouse" />
       <fog attach="fog" args={['#0a0c14', 40, 100]} />
 
-      <ambientLight intensity={2} color="#ffffff" />
+      <AnimatedLights cx={warehouseBounds.cx} cz={warehouseBounds.cz} glowColor={config.glow} />
       <directionalLight
-        position={[10, 25, 10]}
-        intensity={2.5}
-        castShadow
+        position={[10, 25, 10]} intensity={2} castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-camera-far={80}
-        shadow-camera-left={-30}
-        shadow-camera-right={30}
-        shadow-camera-top={30}
-        shadow-camera-bottom={-30}
+        shadow-camera-left={-30} shadow-camera-right={30}
+        shadow-camera-top={30}  shadow-camera-bottom={-30}
       />
-      <pointLight position={[warehouseBounds.cx, 6, warehouseBounds.cz]} intensity={4} color={config.glow} distance={30} />
-      <pointLight position={[warehouseBounds.cx - 6, 4, warehouseBounds.cz - 6]} intensity={2} color={config.glow} distance={20} />
-      <pointLight position={[warehouseBounds.cx + 6, 4, warehouseBounds.cz + 6]} intensity={2} color={config.glow} distance={20} />
 
       <OrbitControls
         ref={controlsRef}
         makeDefault
         target={[warehouseBounds.cx, 0, warehouseBounds.cz]}
-        enablePan
-        enableZoom
-        enableRotate
-        rotateSpeed={0.35}
-        zoomSpeed={0.5}
-        panSpeed={0.5}
+        enablePan enableZoom enableRotate
+        rotateSpeed={0.35} zoomSpeed={0.5} panSpeed={0.5}
         minDistance={2}
         maxDistance={warehouseBounds.camR * 1.8}
         minPolarAngle={0.05}
@@ -359,18 +482,22 @@ function DepartmentSceneContent({
 
       <WarehouseEnvironment department={department} />
 
-      {deptAgents.map((agent, idx) => (
-        <DepartmentAgent
-          key={agent.id}
-          id={agent.id}
-          name={agent.name}
-          color={agent.color}
-          localPosition={getLocalPosition(idx)}
-          state={agent.state}
-          department={department}
-          index={idx}
-        />
-      ))}
+      {deptAgents.map((agent, idx) => {
+        const wps   = getRoleWaypoints(agent.type, warehouseBounds.cx, warehouseBounds.cz, warehouseBounds.spread)
+        const speed = agent.type === 'SCOUT' ? 3.5 : agent.type === 'CARRIER' ? 4.0 : 2.8
+        return (
+          <DepartmentAgent
+            key={agent.id}
+            id={agent.id}
+            name={agent.name}
+            color={agent.color}
+            waypoints={wps}
+            speed={speed}
+            department={department}
+            startIndex={idx}
+          />
+        )
+      })}
 
       {beamElements}
     </>
@@ -397,32 +524,21 @@ export default function DepartmentScene({ department }: { department: ZoneName }
         </div>
       </div>
 
-      {/* Reset camera button — always visible, bottom-right of canvas */}
       <button
         onClick={() => resetRef.current?.()}
         style={{
-          position: 'absolute',
-          bottom: 20,
-          right: 20,
-          zIndex: 10,
-          background: 'rgba(0,0,0,0.6)',
-          color: config.glow,
-          border: `1px solid ${config.glow}`,
-          borderRadius: 6,
-          padding: '6px 14px',
-          fontSize: 12,
-          fontFamily: 'monospace',
-          cursor: 'pointer',
-          letterSpacing: '0.05em',
+          position: 'absolute', bottom: 20, right: 20, zIndex: 10,
+          background: 'rgba(0,0,0,0.6)', color: config.glow,
+          border: `1px solid ${config.glow}`, borderRadius: 6,
+          padding: '6px 14px', fontSize: 12, fontFamily: 'monospace',
+          cursor: 'pointer', letterSpacing: '0.05em',
         }}
       >
         ⌖ Reset View
       </button>
 
       <Canvas
-        shadows
-        dpr={[1, 2]}
-        gl={{ antialias: true }}
+        shadows dpr={[1, 2]} gl={{ antialias: true }}
         camera={{ fov: 60, near: 0.1, far: 500, position: [0, 10, 15] }}
         style={{ cursor: 'grab' }}
         onMouseDown={e => (e.currentTarget.style.cursor = 'grabbing')}
