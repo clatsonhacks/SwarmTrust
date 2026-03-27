@@ -143,6 +143,35 @@ export async function giveFeedback(
   return txHash;
 }
 
+// ── USDC ───────────────────────────────────────────────────────────────────────
+
+export const USDC_ADDRESS = '0x036CbD53842c5426634e7929541eC2318f3dCF7e' as const;
+
+const erc20BalanceOfAbi = [
+  {
+    inputs: [{ internalType: 'address', name: 'account', type: 'address' }],
+    name: 'balanceOf',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const;
+
+/**
+ * Returns the USDC balance of an address as a human-readable string (e.g. "0.500000").
+ * USDC has 6 decimals on Base Sepolia.
+ */
+export async function getUsdcBalance(address: `0x${string}`): Promise<string> {
+  const publicClient = makePublicClient();
+  const raw = await publicClient.readContract({
+    address: USDC_ADDRESS,
+    abi: erc20BalanceOfAbi,
+    functionName: 'balanceOf',
+    args: [address],
+  });
+  return (Number(raw) / 1e6).toFixed(6);
+}
+
 /**
  * Compute a 0–100 reputation score.
  * Returns null if no feedback exists yet (new agent).
@@ -160,7 +189,7 @@ export async function getReputationScore(
 
   if (clients.length === 0) return null;
 
-  const [count, summaryValue] = await publicClient.readContract({
+  const [count, summaryValue, summaryValueDecimals] = await publicClient.readContract({
     address: REPUTATION_REGISTRY,
     abi: reputationRegistryAbi,
     functionName: 'getSummary',
@@ -169,6 +198,8 @@ export async function getReputationScore(
 
   if (count === 0n) return null;
 
-  const avg = Number(summaryValue) / Number(count);
+  // summaryValue is the weighted AVERAGE (not sum) across clients, expressed
+  // with summaryValueDecimals decimal places. Normalize before scoring.
+  const avg = Number(summaryValue) / Math.pow(10, Number(summaryValueDecimals));
   return Math.round((avg + 100) / 2);
 }

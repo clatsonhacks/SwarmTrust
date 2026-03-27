@@ -15,7 +15,7 @@ import { publishEvent } from '../shared/redis/pubsub.js';
 import { AgentLogger } from './agentLog.js';
 import { TaskDecomposer } from './decomposer.js';
 import { selectPeer } from './peerSelector.js';
-import { giveFeedback } from '../shared/blockchain/contracts.js';
+import { giveFeedback, getUsdcBalance, USDC_ADDRESS } from '../shared/blockchain/contracts.js';
 import { makeX402Fetch } from '../shared/x402/client.js';
 import type { RobotId, RobotState, Task } from '../shared/types/index.js';
 
@@ -70,6 +70,22 @@ async function updateState(patch: Partial<RobotState>): Promise<void> {
 // ── x402 resource server (shared across all routes on this robot) ──────────────
 const resourceServer = registerExactEvmScheme(new x402ResourceServer());
 
+// Log PAYMENT_RECEIVED + increment USDC balance after every settled payment
+resourceServer.onAfterSettle(async (ctx) => {
+  const amountUsdc = (Number(ctx.requirements.amount) / 1e6).toFixed(6);
+  agentLog.append('PAYMENT_RECEIVED', {
+    payer: ctx.result.payer ?? 'unknown',
+    amount: amountUsdc,
+    asset: 'USDC',
+    assetAddress: USDC_ADDRESS,
+    network: ctx.result.network,
+    txHash: ctx.result.transaction,
+  });
+  log.info({ payer: ctx.result.payer, amount: amountUsdc, txHash: ctx.result.transaction }, 'Payment received');
+  state.usdcBalance = (parseFloat(state.usdcBalance) + parseFloat(amountUsdc)).toFixed(6);
+  await setRobotState(redis, state);
+});
+
 // ── Express server with x402-protected /task endpoint ─────────────────────────
 function startHttpServer(): void {
   const app = express();
@@ -96,7 +112,7 @@ function startHttpServer(): void {
             scheme: 'exact',
             network: 'eip155:84532',
             payTo: account.address,
-            price: '$0.001',
+            price: '$0.01',
           },
           description: `Delegate a subtask to ${manifest.name}`,
         },
@@ -215,6 +231,17 @@ async function runLoop(): Promise<void> {
             if (peer) {
               try {
                 await updateState({ behaviorState: 'WAITING', currentTaskId: task.taskId });
+
+                agentLog.append('PAYMENT_INITIATED', {
+                  peer: peer.agentId,
+                  peerAddress: peer.endpoint,
+                  amount: '0.01',
+                  asset: 'USDC',
+                  assetAddress: USDC_ADDRESS,
+                  network: 'base-sepolia',
+                });
+                log.info({ peer: peer.agentId, amount: '0.01 USDC' }, 'Initiating x402 payment for delegation');
+
                 const x402Fetch = makeX402Fetch(account);
 
                 const res = await x402Fetch(`${peer.endpoint}/task`, {
@@ -236,6 +263,10 @@ async function runLoop(): Promise<void> {
                     paymentTx: paymentResponse ?? undefined,
                   });
                   log.info({ subTaskId: subtask.subTaskId, peer: peer.agentId }, 'Delegation succeeded, giving feedback');
+
+                  // Decrement USDC balance for the 0.01 we just paid
+                  state.usdcBalance = Math.max(0, parseFloat(state.usdcBalance) - 0.01).toFixed(6);
+                  await setRobotState(redis, state);
 
                   // Post-delegation on-chain feedback (positive)
                   await giveFeedback(account, peer.tokenId, 80, peer.endpoint);
@@ -284,6 +315,16 @@ async function main(): Promise<void> {
   log.info({ name: manifest.name, capabilities: manifest.capabilities }, 'Robot starting...');
 
   await redis.connect();
+
+  // Read on-chain USDC balance at startup
+  try {
+    const balance = await getUsdcBalance(account.address);
+    state.usdcBalance = balance;
+    log.info({ usdcBalance: balance }, 'USDC balance loaded');
+  } catch {
+    log.warn('Could not read USDC balance at startup');
+  }
+
   startHttpServer();
   await registerAgent();
   await updateState({ behaviorState: 'IDLE' });

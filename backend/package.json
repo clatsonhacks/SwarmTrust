@@ -6,8 +6,14 @@
   "main": "index.js",
   "scripts": {
     "orchestrator": "tsx src/orchestrator/index.ts",
-    "robot": "ROBOT_ID=scout-1 tsx src/robot/index.ts",
+    "robot": "tsx src/robot/index.ts",
+    "robot:1": "ROBOT_ID=scout-1 tsx src/robot/index.ts",
+    "robot:2": "ROBOT_ID=lifter-2 tsx src/robot/index.ts",
+    "robot:3": "ROBOT_ID=scout-3 tsx src/robot/index.ts",
+    "robot:4": "ROBOT_ID=carrier-4 tsx src/robot/index.ts",
+    "robot:5": "ROBOT_ID=lifter-5 tsx src/robot/index.ts",
     "register": "tsx scripts/register-agents.ts",
+    "fund-wallets": "tsx scripts/fund-wallets.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
