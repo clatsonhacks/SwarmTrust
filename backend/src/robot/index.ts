@@ -397,20 +397,24 @@ function startHttpServer(): void {
     res.json({ success: true, subTaskId, completedAt: Date.now() });
   });
 
-  app.listen(manifest.payment.port, () => {
-    log.info({ port: manifest.payment.port }, 'HTTP server listening');
+  // Railway injects PORT; fall back to manifest port for local dev
+  const port = Number(process.env.PORT ?? manifest.payment.port);
+  app.listen(port, () => {
+    log.info({ port }, 'HTTP server listening');
   });
 }
 
 // ── Register in Redis ──────────────────────────────────────────────────────────
 async function registerAgent(): Promise<void> {
+  // ROBOT_ENDPOINT is set per-service in Railway (the public https:// URL)
+  const endpoint = process.env.ROBOT_ENDPOINT ?? manifest.payment.endpoint;
   await redis.hset(`robot:${robotId}:config`, {
-    endpoint: manifest.payment.endpoint,
+    endpoint,
     capabilities: manifest.capabilities.join(','),
     walletAddress: account.address,
     registeredAt: Date.now(),
   });
-  log.info({ endpoint: manifest.payment.endpoint }, 'Registered in Redis');
+  log.info({ endpoint }, 'Registered in Redis');
 }
 
 // ── Main decision loop ─────────────────────────────────────────────────────────
