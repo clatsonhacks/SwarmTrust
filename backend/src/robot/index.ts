@@ -644,16 +644,18 @@ async function main(): Promise<void> {
 
   await redis.connect();
 
-  try {
-    const balance = await getUsdcBalance(account.address);
-    state.usdcBalance = balance;
-    log.info({ usdcBalance: balance }, 'USDC balance loaded');
-  } catch {
-    log.warn('Could not read USDC balance at startup');
-  }
-
+  // Start HTTP server immediately so /health passes Railway's health check
+  // before any slow blockchain calls
   startHttpServer();
   await registerAgent();
+
+  // USDC balance is best-effort — don't block startup on RPC latency
+  getUsdcBalance(account.address)
+    .then((balance) => {
+      state.usdcBalance = balance;
+      log.info({ usdcBalance: balance }, 'USDC balance loaded');
+    })
+    .catch(() => log.warn('Could not read USDC balance at startup'));
   await updateState({ behaviorState: 'IDLE' });
 
   await publishEvent(redis, {
