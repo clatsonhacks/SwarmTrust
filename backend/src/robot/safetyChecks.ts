@@ -1,8 +1,8 @@
 import type { Redis } from 'ioredis';
-import { acquireZoneLock } from '../shared/redis/zoneLock.js';
-import { getZoneContents } from '../shared/redis/zoneState.js';
 import type { AgentLogger } from './agentLog.js';
 import type { SubTask } from './decomposer.js';
+import { acquireZoneLock } from '../shared/redis/zoneLock.js';
+import { getZoneContents } from '../shared/redis/zoneState.js';
 import type { ZoneId } from '../shared/types/index.js';
 
 export type SafetyResult =
@@ -10,17 +10,14 @@ export type SafetyResult =
   | { ok: false; checkType: string; reason: string; retryable: boolean };
 
 /**
- * Run all pre-condition safety checks before executing an irreversible subtask.
+ * Run pre-condition safety checks before an irreversible subtask.
  *
- * Checks performed in order:
- *  1. Task-level subtask lock — prevents duplicate execution if two paths
- *     converge on the same sub-task (SET NX, 60s TTL).
- *  2. Zone occupancy — destination must not already hold a pallet.
- *  3. Zone lock — SET NX EX 10 on the destination zone (crash-safe via TTL).
- *  4. Robot position — warning-only; simulation precision is coarse.
- *
- * Returns { ok: true, lockAcquired } on success, or
- *         { ok: false, checkType, reason, retryable } on failure.
+ * Checks (in order):
+ *   1. Task-level subtask lock — prevents double execution if this subtask
+ *      was already picked up by another robot (SET NX EX 60)
+ *   2. Zone occupancy — destination zone must be empty (palletId === null)
+ *   3. Zone lock — acquire a mutex on the destination zone
+ *   4. Robot position — warn if robot is far from source zone (non-blocking)
  */
 export async function runSafetyChecks(
   redis: Redis,
@@ -28,75 +25,88 @@ export async function runSafetyChecks(
   subtask: SubTask,
   taskId: string,
   robotId: string,
-  destinationZone: string | undefined,
-  robotCurrentZone: string | undefined,
+  destinationZone: ZoneId | null,
+  robotCurrentZone: string | null,
   delegated = false,
 ): Promise<SafetyResult> {
+  // ── Check 1: subtask-level deduplication lock ──────────────────────────────
+  const subtaskLockKey = `subtask:${taskId}:${subtask.subTaskId}:lock`;
+  const subtaskLock = await redis.set(subtaskLockKey, robotId, 'EX', 60, 'NX');
 
-  // ── 1. Task-level subtask lock ──────────────────────────────────────────────
-  const taskLockKey = `task:${taskId}:${subtask.subTaskId}:lock`;
-  const claimed = await redis.set(taskLockKey, robotId, 'EX', 60, 'NX');
-  if (claimed !== 'OK') {
-    const reason = 'Another robot already claimed this sub-task execution';
+  if (subtaskLock !== 'OK') {
+    const reason = 'subtask already claimed by another robot';
     agentLog.append('SAFETY_CHECK', {
-      subTaskId: subtask.subTaskId,
-      checkType: 'task_lock',
-      result: 'failed',
+      checkType: 'subtask_lock',
+      subtaskId: subtask.subTaskId,
+      passed: false,
       reason,
+      retryable: false,
     });
-    return { ok: false, checkType: 'task_lock', reason, retryable: false };
+    return { ok: false, checkType: 'subtask_lock', reason, retryable: false };
   }
 
-  if (destinationZone) {
-    // ── 2. Zone occupancy check ─────────────────────────────────────────────
+  agentLog.append('SAFETY_CHECK', {
+    checkType: 'subtask_lock',
+    subtaskId: subtask.subTaskId,
+    passed: true,
+  });
+
+  // ── Check 2: zone occupancy ────────────────────────────────────────────────
+  if (destinationZone !== null) {
     const contents = await getZoneContents(redis, destinationZone);
     if (contents.palletId !== null) {
-      const reason = `Zone ${destinationZone} is occupied by pallet ${contents.palletId}`;
+      const reason = `destination zone ${destinationZone} occupied by pallet ${contents.palletId}`;
       agentLog.append('SAFETY_CHECK', {
-        subTaskId: subtask.subTaskId,
         checkType: 'zone_occupancy',
         zone: destinationZone,
-        result: 'failed',
+        palletId: contents.palletId,
+        passed: false,
         reason,
+        retryable: true,
       });
-      // Release the task lock so a retry can re-claim it
-      await redis.del(taskLockKey);
       return { ok: false, checkType: 'zone_occupancy', reason, retryable: true };
     }
 
-    // ── 3. Zone lock ────────────────────────────────────────────────────────
-    const locked = await acquireZoneLock(redis, destinationZone as ZoneId, robotId, delegated);
-    if (!locked) {
-      const reason = `Zone ${destinationZone} lock is held by another robot`;
+    agentLog.append('SAFETY_CHECK', {
+      checkType: 'zone_occupancy',
+      zone: destinationZone,
+      passed: true,
+    });
+
+    // ── Check 3: zone lock ───────────────────────────────────────────────────
+    const lockAcquired = await acquireZoneLock(redis, destinationZone, robotId, delegated);
+    if (!lockAcquired) {
+      const reason = `zone ${destinationZone} is locked by another robot`;
       agentLog.append('SAFETY_CHECK', {
-        subTaskId: subtask.subTaskId,
         checkType: 'zone_lock',
         zone: destinationZone,
-        result: 'failed',
+        passed: false,
         reason,
+        retryable: true,
       });
-      await redis.del(taskLockKey);
       return { ok: false, checkType: 'zone_lock', reason, retryable: true };
     }
-  }
 
-  // ── 4. Robot position (advisory warning, does not block) ───────────────────
-  if (robotCurrentZone && destinationZone && robotCurrentZone !== destinationZone) {
     agentLog.append('SAFETY_CHECK', {
-      subTaskId: subtask.subTaskId,
-      checkType: 'position',
-      result: 'warning',
-      reason: `Robot is at ${robotCurrentZone} but action targets ${destinationZone} — continuing`,
+      checkType: 'zone_lock',
+      zone: destinationZone,
+      passed: true,
+      delegated,
     });
+
+    // ── Check 4: robot position (warning only) ───────────────────────────────
+    if (robotCurrentZone && robotCurrentZone !== destinationZone) {
+      agentLog.append('SAFETY_CHECK', {
+        checkType: 'robot_position',
+        currentZone: robotCurrentZone,
+        destinationZone,
+        passed: true,
+        warning: 'robot not adjacent to destination zone — navigation required',
+      });
+    }
+
+    return { ok: true, lockAcquired: true };
   }
 
-  // All checks passed
-  agentLog.append('SAFETY_CHECK', {
-    subTaskId: subtask.subTaskId,
-    checkType: 'all',
-    zone: destinationZone ?? 'n/a',
-    result: 'passed',
-  });
-
-  return { ok: true, lockAcquired: !!destinationZone };
+  return { ok: true, lockAcquired: false };
 }

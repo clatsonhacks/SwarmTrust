@@ -6,30 +6,20 @@ export interface ZoneContents {
   lastUpdated: number;
 }
 
-const EMPTY_ZONE: ZoneContents = { palletId: null, itemCount: 0, lastUpdated: 0 };
-
-export async function getZoneContents(redis: Redis, zone: string): Promise<ZoneContents> {
-  const raw = await redis.get(`zone:${zone}:contents`);
-  if (!raw) return { ...EMPTY_ZONE };
-  try {
-    return JSON.parse(raw) as ZoneContents;
-  } catch {
-    return { ...EMPTY_ZONE };
-  }
+function contentsKey(zone: string): string {
+  return `zone:${zone}:contents`;
 }
 
-// Atomically read-then-write zone contents using a Lua script to prevent
-// race conditions when two robots update the same zone simultaneously.
+export async function getZoneContents(redis: Redis, zone: string): Promise<ZoneContents> {
+  const raw = await redis.get(contentsKey(zone));
+  if (!raw) return { palletId: null, itemCount: 0, lastUpdated: 0 };
+  return JSON.parse(raw) as ZoneContents;
+}
+
 export async function setZoneContents(redis: Redis, zone: string, contents: ZoneContents): Promise<void> {
-  await redis.set(
-    `zone:${zone}:contents`,
-    JSON.stringify({ ...contents, lastUpdated: Date.now() })
-  );
+  await redis.set(contentsKey(zone), JSON.stringify(contents));
 }
 
 export async function clearZoneContents(redis: Redis, zone: string): Promise<void> {
-  await redis.set(
-    `zone:${zone}:contents`,
-    JSON.stringify({ palletId: null, itemCount: 0, lastUpdated: Date.now() })
-  );
+  await redis.set(contentsKey(zone), JSON.stringify({ palletId: null, itemCount: 0, lastUpdated: Date.now() }));
 }

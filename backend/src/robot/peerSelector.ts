@@ -40,7 +40,7 @@ function loadTokens(): Record<string, string> {
   return JSON.parse(fs.readFileSync(p, 'utf-8'));
 }
 
-// ── Peer selection — returns full ranked list for retry logic ─────────────────
+// ── Main peer selection algorithm — returns ranked list for retry logic ────────
 export async function selectPeers(
   redis: Redis,
   log: Logger,
@@ -77,11 +77,12 @@ export async function selectPeers(
   log.info({ requiredCapability, candidatesFound: candidates.length }, 'Peer query');
 
   if (candidates.length === 0) {
+    agentLog.append('SUBTASK_ABORTED', { reason: 'no agents with required capability', requiredCapability });
     return [];
   }
 
   // Step 2: Get reputation scores + filter by threshold
-  const qualified: Omit<PeerCandidate, 'isIdle'>[] = [];
+  const qualified: PeerCandidate[] = [];
 
   for (const { agentId, endpoint } of candidates) {
     const tokenIdStr = tokens[agentId];
@@ -101,7 +102,8 @@ export async function selectPeers(
     log.info({ agentId, score: effectiveScore, passed }, 'Reputation check');
 
     if (passed) {
-      qualified.push({ agentId, tokenId, endpoint, reputationScore: effectiveScore });
+      const state = await redis.hget(`robot:${agentId}:state`, 'behaviorState');
+      qualified.push({ agentId, tokenId, endpoint, reputationScore: effectiveScore, isIdle: state === 'IDLE' });
     }
   }
 
@@ -110,23 +112,25 @@ export async function selectPeers(
     return [];
   }
 
-  // Step 3: Sort by reputation, tie-break by IDLE state
-  const ranked: PeerCandidate[] = await Promise.all(
-    qualified.map(async (peer) => {
-      const behaviorState = await redis.hget(`robot:${peer.agentId}:state`, 'behaviorState');
-      return { ...peer, isIdle: behaviorState === 'IDLE' };
-    })
-  );
-
-  ranked.sort((a, b) => {
+  // Step 3: Sort by IDLE first, then by descending reputation score
+  qualified.sort((a, b) => {
     if (a.isIdle !== b.isIdle) return a.isIdle ? -1 : 1;
     return b.reputationScore - a.reputationScore;
   });
 
+  agentLog.append('PEER_SELECTED', {
+    agentId: qualified[0]!.agentId,
+    tokenId: qualified[0]!.tokenId.toString(),
+    reputationScore: qualified[0]!.reputationScore,
+    isIdle: qualified[0]!.isIdle,
+    endpoint: qualified[0]!.endpoint,
+    totalCandidates: qualified.length,
+  });
+
   log.info(
-    { count: ranked.length, top: ranked[0]?.agentId, topScore: ranked[0]?.reputationScore },
-    'Peer candidates ranked'
+    { agentId: qualified[0]!.agentId, score: qualified[0]!.reputationScore, isIdle: qualified[0]!.isIdle, totalCandidates: qualified.length },
+    'Peer selected'
   );
 
-  return ranked;
+  return qualified;
 }
