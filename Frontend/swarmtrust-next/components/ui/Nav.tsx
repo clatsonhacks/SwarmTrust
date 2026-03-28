@@ -46,7 +46,7 @@ export default function Nav() {
       <ul className="nav-links text-bold">
         <li><a href="#about">Premise</a></li>
         <li><Link href="/warehouse">Simulation</Link></li>
-        <li><a href="#">Tracks</a></li>
+        <li><a href="#">Docs</a></li>
       </ul>
 
       <button className="nav-pill" type="button">

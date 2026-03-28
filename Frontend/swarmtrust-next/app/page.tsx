@@ -40,31 +40,69 @@ export default function Home() {
         <AboutSection />
 
         {/* CTA Section to Warehouse */}
-        <section className="section-fullheight" style={{ textAlign: 'center' }}>
-          <div>
-            <h2 style={{
-              fontFamily: 'var(--font-serif)',
-              fontSize: 'clamp(32px, 5vw, 56px)',
-              fontWeight: 700,
-              marginBottom: '24px',
-              color: 'var(--t-hi)',
-            }}>
-              See the Swarm in Action
-            </h2>
-            <p style={{
-              fontFamily: 'var(--font-sans)',
-              fontSize: '16px',
-              color: 'var(--t-mid)',
-              maxWidth: '480px',
-              margin: '0 auto 32px',
-              lineHeight: 1.7,
-            }}>
-              Watch autonomous agents collaborate, negotiate, and build trust
-              in real-time within our warehouse simulation.
-            </p>
-            <Link href="/warehouse" className="cta-warehouse">
-              Enter Warehouse Simulation →
-            </Link>
+        <section className="cta-section">
+          <div className="cta-grid">
+
+            {/* LEFT */}
+            <div className="cta-inner">
+              <p className="cta-eyebrow">Live simulation — Base Sepolia</p>
+
+              <h2 className="cta-hl">
+                The warehouse is<br /><em>running right now.</em>
+              </h2>
+
+              <div className="cta-stats">
+                <div className="cta-stat">
+                  <span className="cta-stat-num">5</span>
+                  <span className="cta-stat-label">Agents online</span>
+                </div>
+                <div className="cta-stat">
+                  <span className="cta-stat-num" style={{ color: 'var(--accent)' }}>x402</span>
+                  <span className="cta-stat-label">Payment protocol</span>
+                </div>
+                <div className="cta-stat">
+                  <span className="cta-stat-num">0</span>
+                  <span className="cta-stat-label">Humans required</span>
+                </div>
+              </div>
+
+              <Link href="/warehouse" className="cta-warehouse">
+                Enter Simulation →
+              </Link>
+            </div>
+
+            {/* RIGHT — execution flow */}
+            <ol className="flow-list">
+              <li className="flow-row">
+                <span className="flow-num">01</span>
+                <div className="flow-body">
+                  <span className="flow-title">Task queued</span>
+                  <span className="flow-desc">Orchestrator pushes task to Redis. Robot agent claims it and sends to Groq LLM for decomposition into sub-tasks.</span>
+                </div>
+              </li>
+              <li className="flow-row">
+                <span className="flow-num">02</span>
+                <div className="flow-body">
+                  <span className="flow-title">Peer discovery</span>
+                  <span className="flow-desc">Agent queries the ERC-8004 registry on Base Sepolia. Reads reputation scores. Selects the highest-trust available peer above threshold.</span>
+                </div>
+              </li>
+              <li className="flow-row">
+                <span className="flow-num">03</span>
+                <div className="flow-body">
+                  <span className="flow-title">x402 payment</span>
+                  <span className="flow-desc">Agent fires HTTP request to peer endpoint. Receives 402. Signs gasless EIP-3009 USDC transfer. Peer verifies settlement and executes.</span>
+                </div>
+              </li>
+              <li className="flow-row">
+                <span className="flow-num">04</span>
+                <div className="flow-body">
+                  <span className="flow-title">Reputation update</span>
+                  <span className="flow-desc">On completion, delegating robot writes success or failure signal on-chain. Full decision log uploaded immutably to Storacha / IPFS.</span>
+                </div>
+              </li>
+            </ol>
+
           </div>
         </section>
       </main>
