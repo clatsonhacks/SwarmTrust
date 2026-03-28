@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Playfair_Display, DM_Sans, Space_Mono } from 'next/font/google'
 import './globals.css'
+import Cursor from '@/components/ui/Cursor'
 
 // ── Font definitions ──────────────────────────────────────────────
 // Each font gets a CSS variable so globals.css can reference it.
@@ -47,7 +48,10 @@ export default function RootLayout({
       lang="en"
       className={`${playfair.variable} ${dmSans.variable} ${spaceMono.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        <Cursor />
+        {children}
+      </body>
     </html>
   )
 }

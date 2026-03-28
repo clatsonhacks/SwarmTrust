@@ -14,7 +14,6 @@ import { useState } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import Loader from '@/components/ui/Loader'
-import Cursor from '@/components/ui/Cursor'
 import Nav from '@/components/ui/Nav'
 import HeroSection from '@/components/ui/HeroSection'
 import Ticker from '@/components/ui/Ticker'
@@ -30,7 +29,6 @@ export default function Home() {
     <>
       {!loaded && <Loader onComplete={() => setLoaded(true)} />}
 
-      <Cursor />
       <Nav />
 
       {/* Bee flies in the background, following scroll */}

@@ -6,10 +6,10 @@ export default function Nav() {
   return (
     <nav className="nav" id="nav" aria-label="Main navigation">
       <Link className="nav-logo" href="/">
-        Swarm<b>Trust</b>
+        De<b>Ware</b>
       </Link>
 
-      <ul className="nav-links">
+      <ul className="nav-links text-bold">
         <li><a href="#about">Premise</a></li>
         <li><Link href="/warehouse">Simulation</Link></li>
         <li><a href="#">Tracks</a></li>

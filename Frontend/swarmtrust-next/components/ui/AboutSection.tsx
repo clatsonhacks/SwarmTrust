@@ -56,6 +56,7 @@ export default function AboutSection() {
 
       // Split about headline lines
       const hlLines = document.querySelectorAll<HTMLElement>('.ahl-line')
+      if (hlLines[0]?.children.length > 0) return  // StrictMode guard
       const lineCharArrays: HTMLElement[][] = []
       hlLines.forEach(line => {
         lineCharArrays.push(splitLineChars(line))
