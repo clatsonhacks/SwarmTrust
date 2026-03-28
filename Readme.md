@@ -1,4 +1,4 @@
-# SwarmTrust
+# Deware
 ## Autonomous Multi-Robot Coordination with On-Chain Trust, Identity & Machine Payments
 
 > PL Genesis: Frontiers of Collaboration Hackathon 2026
