@@ -460,17 +460,55 @@ function DepartmentSceneContent({
     [agents, config.agentIds],
   )
 
+  // Animated camera fly-in on mount
+  const cameraAnimRef = useRef({ progress: 0, active: true })
+
   useEffect(() => {
     const { cx, cz, camR, camH } = warehouseBounds
-    camera.position.set(cx + camR * 0.7, camH, cz + camR * 0.7)
+    // Start position: far outside, high up
+    camera.position.set(cx + camR * 2, camH * 1.5, cz + camR * 2)
     camera.lookAt(cx, 0, cz)
+    // Reset animation state
+    cameraAnimRef.current = { progress: 0, active: true }
+
     setTimeout(() => {
       controlsRef.current?.saveState()
       resetRef.current = () => controlsRef.current?.reset()
-    }, 100)
+    }, 2500) // Save state after fly-in completes
   }, [camera, warehouseBounds, resetRef])
 
-  useFrame((_, delta) => { tick(delta) })
+  // Animate camera flying into the warehouse
+  useFrame((_, delta) => {
+    tick(delta)
+
+    const anim = cameraAnimRef.current
+    if (!anim.active) return
+
+    const { cx, cz, camR, camH } = warehouseBounds
+    anim.progress += delta * 0.5 // ~2 second animation
+
+    if (anim.progress >= 1) {
+      anim.active = false
+      anim.progress = 1
+    }
+
+    // Easing function (ease-out cubic)
+    const t = 1 - Math.pow(1 - anim.progress, 3)
+
+    // Start: far outside & high | End: inside warehouse at eye level
+    const startPos = { x: cx + camR * 2, y: camH * 1.5, z: cz + camR * 2 }
+    const endPos = { x: cx + 1.5, y: 2.5, z: cz + 1.5 } // Inside, low angle
+
+    camera.position.x = startPos.x + (endPos.x - startPos.x) * t
+    camera.position.y = startPos.y + (endPos.y - startPos.y) * t
+    camera.position.z = startPos.z + (endPos.z - startPos.z) * t
+
+    // Update controls target to center
+    if (controlsRef.current) {
+      controlsRef.current.target.set(cx, 1, cz)
+      controlsRef.current.update()
+    }
+  })
 
   // Beams between agents in this dept
   const getAgentPos = (agentId: string): [number, number, number] => {

@@ -35,6 +35,7 @@ export const DEPARTMENT_CONFIGS: Record<ZoneName, DepartmentConfig> = {
     color: '#0d2a1a',
     glow: '#1aff88',
     agentIds: ['R1', 'R5'],
+    agentScale: 15,    // Larger model
   },
   STORAGE: {
     name: 'STORAGE',
@@ -45,6 +46,7 @@ export const DEPARTMENT_CONFIGS: Record<ZoneName, DepartmentConfig> = {
     color: '#0a1a2e',
     glow: '#5cc8ff',
     agentIds: ['R2'],
+    agentScale: 15,    // Larger model
   },
   STAGING: {
     name: 'STAGING',
@@ -55,6 +57,7 @@ export const DEPARTMENT_CONFIGS: Record<ZoneName, DepartmentConfig> = {
     color: '#2a2010',
     glow: '#ffcc44',
     agentIds: ['R3'],
+    agentScale: 0.55,    // Medium model
   },
   DISPATCH: {
     name: 'DISPATCH',
@@ -65,7 +68,8 @@ export const DEPARTMENT_CONFIGS: Record<ZoneName, DepartmentConfig> = {
     color: '#2a0e0e',
     glow: '#ff5566',
     agentIds: ['R4'],
-    outdoor: true,      // Patrol near the warehouse entrance
+    outdoor: true,
+    agentScale: 0.10,    // Smaller model
   },
 }
 
