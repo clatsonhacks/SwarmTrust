@@ -333,6 +333,232 @@ function WarehouseEnvironment({ department }: { department: ZoneName }) {
   )
 }
 
+// ── Zone Label (floating 3D text) ─────────────────────────────────────
+function ZoneLabel({
+  text,
+  position,
+  color,
+  subtitle
+}: {
+  text: string
+  position: [number, number, number]
+  color: string
+  subtitle?: string
+}) {
+  const groupRef = useRef<THREE.Group>(null!)
+
+  useFrame(({ clock, camera }) => {
+    if (groupRef.current) {
+      // Gentle float animation
+      groupRef.current.position.y = position[1] + Math.sin(clock.getElapsedTime() * 0.8) * 0.1
+      // Always face camera
+      groupRef.current.quaternion.copy(camera.quaternion)
+    }
+  })
+
+  return (
+    <group ref={groupRef} position={position}>
+      <Html center style={{ pointerEvents: 'none' }}>
+        <div style={{
+          background: `linear-gradient(135deg, ${color}22, ${color}44)`,
+          border: `2px solid ${color}`,
+          borderRadius: 12,
+          padding: '12px 24px',
+          backdropFilter: 'blur(10px)',
+          boxShadow: `0 0 30px ${color}66`,
+        }}>
+          <div style={{
+            color: color,
+            fontSize: 28,
+            fontWeight: 800,
+            fontFamily: 'monospace',
+            letterSpacing: '0.15em',
+            textShadow: `0 0 20px ${color}`,
+          }}>
+            {text}
+          </div>
+          {subtitle && (
+            <div style={{
+              color: '#ffffff99',
+              fontSize: 11,
+              fontFamily: 'monospace',
+              letterSpacing: '0.1em',
+              marginTop: 4,
+              textAlign: 'center',
+            }}>
+              {subtitle}
+            </div>
+          )}
+        </div>
+      </Html>
+    </group>
+  )
+}
+
+// ── Floor Glow Zone ───────────────────────────────────────────────────
+function FloorGlowZone({
+  position,
+  color,
+  radius = 3
+}: {
+  position: [number, number, number]
+  color: string
+  radius?: number
+}) {
+  const ringRef = useRef<THREE.Mesh>(null!)
+  const glowColor = useMemo(() => new THREE.Color(color), [color])
+
+  useFrame(({ clock }) => {
+    if (ringRef.current) {
+      const t = clock.getElapsedTime()
+      // Pulsing glow
+      const scale = 1 + Math.sin(t * 1.5) * 0.1
+      ringRef.current.scale.set(scale, scale, 1)
+      ;(ringRef.current.material as THREE.MeshBasicMaterial).opacity = 0.3 + Math.sin(t * 2) * 0.15
+    }
+  })
+
+  return (
+    <group position={position}>
+      {/* Outer glow ring */}
+      <mesh ref={ringRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+        <ringGeometry args={[radius * 0.8, radius, 64]} />
+        <meshBasicMaterial color={glowColor} transparent opacity={0.3} side={THREE.DoubleSide} />
+      </mesh>
+      {/* Inner solid circle */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
+        <circleGeometry args={[radius * 0.8, 64]} />
+        <meshBasicMaterial color={glowColor} transparent opacity={0.08} side={THREE.DoubleSide} />
+      </mesh>
+    </group>
+  )
+}
+
+// ── Floating Particles ────────────────────────────────────────────────
+function FloatingParticles({ color, count = 50, spread = 8 }: { color: string; count?: number; spread?: number }) {
+  const particlesRef = useRef<THREE.Points>(null!)
+
+  const particles = useMemo(() => {
+    const positions = new Float32Array(count * 3)
+    const speeds = new Float32Array(count)
+    for (let i = 0; i < count; i++) {
+      positions[i * 3] = (Math.random() - 0.5) * spread
+      positions[i * 3 + 1] = Math.random() * 4
+      positions[i * 3 + 2] = (Math.random() - 0.5) * spread
+      speeds[i] = 0.2 + Math.random() * 0.5
+    }
+    return { positions, speeds }
+  }, [count, spread])
+
+  useFrame(({ clock }) => {
+    if (particlesRef.current) {
+      const positions = particlesRef.current.geometry.attributes.position.array as Float32Array
+      const t = clock.getElapsedTime()
+      for (let i = 0; i < count; i++) {
+        // Gentle upward drift
+        positions[i * 3 + 1] += particles.speeds[i] * 0.005
+        // Reset when too high
+        if (positions[i * 3 + 1] > 5) positions[i * 3 + 1] = 0
+        // Slight horizontal sway
+        positions[i * 3] += Math.sin(t + i) * 0.002
+      }
+      particlesRef.current.geometry.attributes.position.needsUpdate = true
+    }
+  })
+
+  return (
+    <points ref={particlesRef}>
+      <bufferGeometry>
+        <bufferAttribute
+          attach="attributes-position"
+          count={count}
+          array={particles.positions}
+          itemSize={3}
+        />
+      </bufferGeometry>
+      <pointsMaterial
+        color={color}
+        size={0.08}
+        transparent
+        opacity={0.6}
+        sizeAttenuation
+      />
+    </points>
+  )
+}
+
+// ── Status Icon (floating emoji/icon above workspace) ─────────────────
+function StatusIcon({
+  position,
+  icon,
+  label
+}: {
+  position: [number, number, number]
+  icon: string
+  label: string
+}) {
+  const groupRef = useRef<THREE.Group>(null!)
+
+  useFrame(({ clock }) => {
+    if (groupRef.current) {
+      groupRef.current.position.y = position[1] + Math.sin(clock.getElapsedTime() * 1.2) * 0.15
+      groupRef.current.rotation.y = Math.sin(clock.getElapsedTime() * 0.5) * 0.2
+    }
+  })
+
+  return (
+    <group ref={groupRef} position={position}>
+      <Html center style={{ pointerEvents: 'none' }}>
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 4,
+        }}>
+          <div style={{
+            fontSize: 32,
+            filter: 'drop-shadow(0 0 10px rgba(255,255,255,0.5))',
+          }}>
+            {icon}
+          </div>
+          <div style={{
+            fontSize: 10,
+            color: '#fff',
+            fontFamily: 'monospace',
+            background: 'rgba(0,0,0,0.6)',
+            padding: '2px 8px',
+            borderRadius: 4,
+            letterSpacing: '0.05em',
+          }}>
+            {label}
+          </div>
+        </div>
+      </Html>
+    </group>
+  )
+}
+
+// ── Corner Markers ────────────────────────────────────────────────────
+function CornerMarkers({ cx, cz, spread, color }: { cx: number; cz: number; spread: number; color: string }) {
+  const corners = [
+    [cx - spread, 0.05, cz - spread],
+    [cx + spread, 0.05, cz - spread],
+    [cx - spread, 0.05, cz + spread],
+    [cx + spread, 0.05, cz + spread],
+  ] as [number, number, number][]
+
+  return (
+    <>
+      {corners.map((pos, i) => (
+        <mesh key={i} position={pos} rotation={[-Math.PI / 2, 0, Math.PI / 4]}>
+          <planeGeometry args={[0.4, 0.4]} />
+          <meshBasicMaterial color={color} transparent opacity={0.8} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+    </>
+  )
+}
+
 // ── Animated lighting ────────────────────────────────────────────────
 function AnimatedLights({ cx, cz, glowColor }: { cx: number; cz: number; glowColor: string }) {
   const ambientRef    = useRef<THREE.AmbientLight>(null!)
