@@ -126,6 +126,7 @@ interface SimStore {
   meetingActive: boolean
   nextMeeting:   number
   simTime:       number    // seconds since start
+  connected:     boolean   // true when live backend WebSocket is connected
 
   // Beams: [fromId, toId, progress 0-1]
   activeBeams:   Array<{ id:number, from:string, to:string, progress:number }>
@@ -141,6 +142,13 @@ interface SimStore {
   fireBeam:       (fromId: string, toId: string) => void
   setView:        (view: ViewState) => void
   getDepartmentAgents: (dept: ZoneName) => AgentRuntime[]
+
+  // Actions driven by the live backend (called from useBackendSocket)
+  setConnected:      (v: boolean) => void
+  setAgentState:     (agentId: string, state: AgentState, task: string) => void
+  setAgentTask:      (agentId: string, task: string) => void
+  setAgentReputation:(agentId: string, score: number) => void
+  updateStats:       (stats: { tasksDone: number; totalUSDC: number; totalTx: number }) => void
 }
 
 let logCounter = 0
@@ -157,6 +165,7 @@ export const useAgentStore = create<SimStore>((set, get) => ({
   simTime:       0,
   activeBeams:   [],
   currentView:   'OVERVIEW',
+  connected:     false,
 
   setView(view: ViewState) {
     set({ currentView: view })
@@ -165,6 +174,40 @@ export const useAgentStore = create<SimStore>((set, get) => ({
   getDepartmentAgents(dept: ZoneName) {
     const config = DEPARTMENT_CONFIGS[dept]
     return get().agents.filter(a => config.agentIds.includes(a.id))
+  },
+
+  // ── Live backend actions ──────────────────────────────────────
+
+  setConnected(v: boolean) {
+    set({ connected: v })
+  },
+
+  setAgentState(agentId: string, state: AgentState, task: string) {
+    set(st => ({
+      agents: st.agents.map(a => {
+        if (a.id !== agentId) return a
+        // Pick a new zone target so the 3D agent actually moves
+        const newZone   = state === 'IDLE' ? a.zone : pickZone(a.zone as ZoneName)
+        const newTarget = state === 'IDLE' ? a.target : zoneCentre(ZONES[newZone])
+        return { ...a, state, task, zone: newZone, target: newTarget }
+      }),
+    }))
+  },
+
+  setAgentTask(agentId: string, task: string) {
+    set(st => ({
+      agents: st.agents.map(a => a.id === agentId ? { ...a, task } : a),
+    }))
+  },
+
+  setAgentReputation(agentId: string, score: number) {
+    set(st => ({
+      agents: st.agents.map(a => a.id === agentId ? { ...a, reputation: score } : a),
+    }))
+  },
+
+  updateStats({ tasksDone, totalUSDC, totalTx }) {
+    set({ tasksDone, totalUSDC, totalTx })
   },
 
   addLog(msg, type = 'info') {
@@ -217,6 +260,25 @@ export const useAgentStore = create<SimStore>((set, get) => ({
   tick(dt: number) {
     const st = get()
     const newTime = st.simTime + dt
+    // When the live backend is connected, skip the fake state machine —
+    // state/task/stats come from WebSocket events instead.
+    if (st.connected) {
+      const newBeams = st.activeBeams
+        .map(b => ({ ...b, progress: b.progress + dt * 0.9 }))
+        .filter(b => b.progress < 1)
+      const newAgents = st.agents.map(agent => {
+        const dx = agent.target[0] - agent.position[0]
+        const dz = agent.target[2] - agent.position[2]
+        const d  = Math.sqrt(dx * dx + dz * dz)
+        const speed = agent.type === 'SCOUT' ? 4.5 : agent.type === 'CARRIER' ? 3.8 : 3.2
+        const newPos: [number, number, number] = d > 0.12
+          ? [agent.position[0] + (dx/d)*speed*dt, 0, agent.position[2] + (dz/d)*speed*dt]
+          : agent.target
+        return { ...agent, position: newPos }
+      })
+      set({ simTime: newTime, activeBeams: newBeams, agents: newAgents })
+      return
+    }
 
     // ── advance beams ──────────────────────────────────
     const newBeams = st.activeBeams
