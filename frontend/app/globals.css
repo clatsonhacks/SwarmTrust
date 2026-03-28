@@ -816,18 +816,25 @@ body.cursor-hover .c-ring {
 ═══════════════════════════════════════════════ */
 .dept-overview {
   width: 100%;
-  height: 100%;
   background: var(--bg);
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: var(--s5);
+  padding: clamp(40px, 10vh, 96px) var(--s5) var(--s6);
 }
 
 .dept-header {
   text-align: center;
   margin-bottom: var(--s5);
+}
+
+.dept-section-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.28);
+  margin: 0 0 20px 0;
 }
 
 .dept-title {
@@ -882,6 +889,23 @@ body.cursor-hover .c-ring {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  position: relative;
+}
+
+.dept-card-icon.active::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 10px;
+  border: 1.5px solid currentColor;
+  color: inherit;
+  animation: icon-ring-pulse 1.8s ease-in-out infinite;
+  opacity: 0;
+}
+
+@keyframes icon-ring-pulse {
+  0%   { opacity: 0.8; transform: scale(1); }
+  100% { opacity: 0;   transform: scale(1.35); }
 }
 
 .dept-card-count {
@@ -908,41 +932,85 @@ body.cursor-hover .c-ring {
 .dept-card-desc {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--t-mid);
+  color: rgba(255, 255, 255, 0.42);
   margin: 0;
   line-height: 1.4;
 }
 
+.dept-card-states {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.dept-card-state-pill {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.dept-card-enter {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.28);
+  white-space: nowrap;
+  transition: color 0.2s;
+  flex-shrink: 0;
+}
+
 .dept-card-arrow {
-  font-size: 20px;
-  color: var(--t-lo);
-  transition: transform 0.2s, color 0.2s;
+  display: inline-block;
+  transition: transform 0.2s;
+}
+
+.dept-card:hover .dept-card-enter {
+  color: var(--dept-glow, var(--accent));
 }
 
 .dept-card:hover .dept-card-arrow {
   transform: translateX(4px);
-  color: var(--dept-glow, var(--accent));
 }
 
 .dept-stats {
-  display: flex;
-  gap: 48px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
   margin-top: var(--s5);
-  padding-top: var(--s4);
-  border-top: 1px solid var(--b-lo);
+  max-width: 800px;
+  width: 100%;
 }
 
 .dept-stat {
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 0.5px solid var(--b-lo);
+  border-radius: 4px;
+}
+
+.dept-stat-divider { display: none; }
+
+.dept-stat-label {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.28);
 }
 
 .dept-stat-value {
   display: block;
   font-family: var(--font-mono);
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
   color: var(--t-hi);
-  margin-bottom: 4px;
+  line-height: 1;
 }
 
 .dept-stat-value.live {
@@ -952,15 +1020,7 @@ body.cursor-hover .c-ring {
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-}
-
-.dept-stat-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--t-lo);
+  50% { opacity: 0.5; }
 }
 
 /* ═══════════════════════════════════════════════
