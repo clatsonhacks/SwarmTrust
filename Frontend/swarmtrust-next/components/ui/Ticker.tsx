@@ -1,9 +1,9 @@
 export default function Ticker() {
   const items = [
-    'SwarmTrust 2026', '◈', '48 Hours', '◈', 'Distributed Trust', '◈',
-    'Zero-Knowledge Proofs', '◈', 'Multi-Agent AI', '◈',
-    'ERC-8004 Identity', '◈', 'Machine Payments', '◈',
-    'No Single Point of Failure', '◈',
+    'DeWare', '◈', 'Autonomous Warehouse', '◈', 'ERC-8004 Identity', '◈',
+    'x402 Machine Payments', '◈', 'Multi-Agent AI', '◈',
+    'On-Chain Reputation', '◈', 'Base Sepolia', '◈',
+    'No Master Node', '◈',
   ]
   const doubled = [...items, ...items]
 

@@ -533,7 +533,47 @@ body.cursor-hover .c-ring {
   padding-left: 22px;
   margin: 40px 0;
 }
-.tag-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 40px; }
+
+/* ── EXECUTION FLOW LIST ── */
+.flow-list {
+  list-style: none;
+  margin-top: 8px;
+}
+.flow-row {
+  display: flex;
+  gap: 20px;
+  padding: 16px 0;
+  border-bottom: 0.5px solid var(--b-lo);
+}
+.flow-row:first-child { border-top: 0.5px solid var(--b-lo); }
+.flow-num {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+.flow-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.flow-title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--t-hi);
+}
+.flow-desc {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 300;
+  color: var(--t-mid);
+  line-height: 1.7;
+}
 .tag {
   font-family: var(--font-mono);
   font-size: 9px;

@@ -86,7 +86,6 @@ export default function HeroSection() {
       }, 2.45)
       tl.to('#heroCta',    { opacity: 1, y: 0, duration: 0.65, ease: 'power3.out' }, 2.75)
       tl.to('#heroScroll', { opacity: 1, duration: 0.8 }, 2.9)
-      tl.to(['#cTL', '#cTR'], { opacity: 1, duration: 0.8, stagger: 0.1 }, 3.1)
     }
     run()
   }, [])
@@ -115,7 +114,7 @@ export default function HeroSection() {
         </h1>
 
         <div className="hero-foot" id="heroFoot" style={{ opacity: 0 }}>
-          <p className="hero-tagline" id="heroTag">
+          <p className="hero-tagline" text-xm id="heroTag">
             The warehouse runs itself. Five robots coordinate, pay each other, and earn trust on-chain — no human in the loop.
           </p>
           <div className="hero-actions" id="heroCta"

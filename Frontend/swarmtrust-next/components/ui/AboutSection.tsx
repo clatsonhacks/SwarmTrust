@@ -129,7 +129,7 @@ export default function AboutSection() {
 
   return (
     <section className="about" id="about" ref={sectionRef}>
-      <span className="about-bg-word" aria-hidden="true">Trust.</span>
+      <span className="about-bg-word" aria-hidden="true">Ware.</span>
 
       {/* Section index */}
       <p className="sec-idx">
@@ -151,69 +151,33 @@ export default function AboutSection() {
             </span>
           </h2>
 
-          <ul className="stat-list">
-            <li className="stat-row">
-              <span className="stat-num">48</span>
-              <span className="stat-label">Hours to build</span>
-            </li>
-            <li className="stat-row">
-              <span className="stat-num">4</span>
-              <span className="stat-label">Prize tracks</span>
-            </li>
-            <li className="stat-row">
-              <span className="stat-num" style={{ color: 'var(--accent)' }}>$19k</span>
-              <span className="stat-label">Max prize pool</span>
-            </li>
-            <li className="stat-row">
-              <span className="stat-num">5</span>
-              <span className="stat-label">Live agents</span>
-            </li>
-          </ul>
         </div>
 
         {/* ── RIGHT: Body + Quote + Tags ── */}
         <div>
           <div className="about-body">
             <p>
-              What if <strong>trust didn't need a headquarters?</strong> What
-              if it could live in the edges — distributed across thousands of
-              nodes, each one accountable, none of them singular?
+              Each robot runs an independent process with its own <strong>ERC-8004
+              on-chain identity</strong>, a wallet holding testnet USDC, and a
+              decision loop that polls for tasks, queries peer reputation, and
+              delegates sub-tasks — all without a central controller.
             </p>
 
             <blockquote className="about-quote">
-              "The network is the authority.<br />
-              The swarm is the proof."
+              "Robot A doesn't ask permission.<br />
+              It checks the chain, pays Robot B, and moves on."
             </blockquote>
 
             <p>
-              SwarmTrust is a 48-hour hackathon at the intersection of{' '}
-              <strong>
-                distributed systems, cryptographic verification, and collective
-                intelligence.
-              </strong>{' '}
-              We're looking for builders who want to rethink how machines
-              establish belief in each other — without asking permission from
-              the center.
-            </p>
-
-            <p>
-              From <strong>zero-knowledge proofs</strong> and consensus
-              protocols to <strong>multi-agent AI coordination</strong> and
-              decentralised identity. The only rule:{' '}
-              <strong>no single point of failure.</strong>
+              When a robot needs a peer, it reads{' '}
+              <strong>on-chain reputation scores</strong> from the ERC-8004
+              registry, selects the highest-trust available agent, and fires an{' '}
+              <strong>x402 HTTP payment</strong> — a gasless EIP-3009 USDC
+              transfer — before the sub-task executes. Every decision is logged
+              immutably to <strong>Storacha / IPFS</strong>.
             </p>
           </div>
 
-          <div className="tag-row">
-            <span className="tag tag-accent">Distributed Systems</span>
-            <span className="tag">Zero-Knowledge Proofs</span>
-            <span className="tag">Multi-Agent AI</span>
-            <span className="tag">ERC-8004 Identity</span>
-            <span className="tag">x402 Payments</span>
-            <span className="tag">Consensus Protocols</span>
-            <span className="tag">Trustless Infra</span>
-            <span className="tag">Base Sepolia</span>
-          </div>
         </div>
 
       </div>

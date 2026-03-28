@@ -29,11 +29,11 @@ const spaceMono = Space_Mono({
 })
 
 export const metadata: Metadata = {
-  title:       'SwarmTrust — PL Genesis Hackathon 2026',
-  description: 'Autonomous robots. Verified trust. Machine payments. No humans required.',
+  title:       'DeWare — Autonomous Decentralized Warehouse',
+  description: 'Five robots. No humans. No master node. The warehouse runs itself.',
   openGraph: {
-    title:       'SwarmTrust',
-    description: 'No single point of failure.',
+    title:       'DeWare',
+    description: 'Five robots. No humans. No master node.',
     type:        'website',
   },
 }

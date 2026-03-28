@@ -36,7 +36,7 @@ export default function DepartmentOverview() {
   return (
     <div className="dept-overview">
       <div className="dept-header">
-        <h1 className="dept-title">SwarmTrust Warehouse</h1>
+        <h1 className="dept-title">DeWare</h1>
         <p className="dept-subtitle">Select a department to view agents</p>
       </div>
 
