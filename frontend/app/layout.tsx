@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Playfair_Display, DM_Sans, Space_Mono } from 'next/font/google'
 import './globals.css'
+import Cursor from '@/components/ui/Cursor'
 
 // ── Font definitions ──────────────────────────────────────────────
 // Each font gets a CSS variable so globals.css can reference it.
@@ -28,11 +29,11 @@ const spaceMono = Space_Mono({
 })
 
 export const metadata: Metadata = {
-  title:       'SwarmTrust — PL Genesis Hackathon 2026',
-  description: 'Autonomous robots. Verified trust. Machine payments. No humans required.',
+  title:       'DeWare — Autonomous Decentralized Warehouse',
+  description: 'Five robots. No humans. No master node. The warehouse runs itself.',
   openGraph: {
-    title:       'SwarmTrust',
-    description: 'No single point of failure.',
+    title:       'DeWare',
+    description: 'Five robots. No humans. No master node.',
     type:        'website',
   },
 }
@@ -47,7 +48,10 @@ export default function RootLayout({
       lang="en"
       className={`${playfair.variable} ${dmSans.variable} ${spaceMono.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        <Cursor />
+        {children}
+      </body>
     </html>
   )
 }

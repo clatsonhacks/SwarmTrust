@@ -102,7 +102,7 @@ export default function Loader({ onComplete }: LoaderProps) {
           fontSize: '9px', letterSpacing: '0.3em', textTransform: 'uppercase',
           color: '#2a2825', marginBottom: '16px',
         }}>
-          PL Genesis · Frontiers of Collaboration · 2026
+          Autonomous Decentralized Warehouse · 2026
         </div>
 
         <div style={{
@@ -114,13 +114,13 @@ export default function Loader({ onComplete }: LoaderProps) {
           lineHeight: 1,
           marginBottom: '48px',
         }}>
-          Swarm
+          De
           <span style={{
             color: '#c5ff2b',
-            fontStyle: 'italic',
-            fontWeight: 400,
+            fontStyle: 'normal',
+            fontWeight: 700,
           }}>
-            Trust
+            Ware
           </span>
           <span style={{ color: '#c5ff2b' }}>.</span>
         </div>

@@ -15,7 +15,7 @@ import { useBackendSocket } from '@/lib/useBackendSocket'
 import type { ZoneName } from '@/lib/types'
 
 const DepartmentOverview = dynamic(() => import('@/components/scene/DepartmentOverview'), { ssr: false })
-const DepartmentScene = dynamic(() => import('@/components/scene/DepartmentScene'), { ssr: false })
+const DepartmentScene    = dynamic(() => import('@/components/scene/DepartmentScene'), { ssr: false })
 
 export default function WarehousePage() {
   const [loaded, setLoaded] = useState(false)
