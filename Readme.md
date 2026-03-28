@@ -5,6 +5,7 @@
 > Tracks: AI & Robotics ($6,000) · ERC-8004 Agents With Receipts ($4,004) · Agent Only: Let The Agent Cook ($4,000) · Fresh Code ($5,000)
 > Maximum Prize Ceiling: $19,004
 
+
 ---
 
 ## Table of Contents
