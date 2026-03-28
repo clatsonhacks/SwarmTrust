@@ -1,4 +1,4 @@
-# SwarmTrust
+# Deware
 ## Autonomous Multi-Robot Coordination with On-Chain Trust, Identity & Machine Payments
 
 > PL Genesis: Frontiers of Collaboration Hackathon 2026
@@ -43,7 +43,7 @@ When Robot A finishes its portion of a task and needs Robot B to continue, the f
 
 **Decentralization problem:** Every current multi-robot coordination system has a central controller. If it goes down, the entire fleet stops. There is no protocol for robots to self-organize, self-select peers, and self-execute workflows without a master node.
 
-SwarmTrust solves all four problems simultaneously.
+Deware solves all four problems simultaneously.
 
 ---
 
@@ -67,7 +67,7 @@ The entire interaction — from peer discovery to payment to reputation update �
 
 ## 3. The Solution
 
-SwarmTrust is a browser-based 3D warehouse simulation where five autonomous robot agents coordinate multi-step warehouse tasks entirely without human intervention.
+Deware is a browser-based 3D warehouse simulation where five autonomous robot agents coordinate multi-step warehouse tasks entirely without human intervention.
 
 The simulation runs in real time. You watch robots navigate a warehouse grid, pick up tasks, query each other's reputations, pay each other in USDC, and update reputations — while a dashboard alongside the simulation shows every on-chain transaction, every reputation change, and every agent decision as it happens.
 
@@ -359,7 +359,7 @@ The standard defines three separate on-chain registries:
 
 **Reputation Registry:** A separate contract where reputation scores are accumulated per agent token ID. Calling the recordSuccess function for a token ID increments its success counter. Calling recordFailure increments its failure counter. The getReputation function returns a score computed from the ratio of successes to total interactions, normalized to a 0-100 scale. Any address can record a reputation signal for any token ID — the design assumes social accountability, not permissioned writes. For the hackathon, this is intentional and acceptable.
 
-**Validation Registry:** A third contract for attestations about agent capabilities from third parties. As of March 2026, this registry's contracts have not been deployed by the ERC-8004 maintainers. SwarmTrust does not use this registry — only the Identity and Reputation registries.
+**Validation Registry:** A third contract for attestations about agent capabilities from third parties. As of March 2026, this registry's contracts have not been deployed by the ERC-8004 maintainers. Deware does not use this registry — only the Identity and Reputation registries.
 
 ### 10.2 ERC-8004 Integration Mechanics
 
@@ -367,7 +367,7 @@ The Chitin Protocol provides the simplest integration path. Chitin is a thin ser
 
 Alternatively, the @agentic-trust/8004-ext-sdk provides direct TypeScript bindings to the registry contracts without going through Chitin, at the cost of more setup work (manual IPFS upload, direct contract interaction).
 
-For SwarmTrust, the recommended approach is to use Chitin for the initial registration call and then interact with the registry contracts directly via viem for ongoing reads and reputation writes. This gives the fastest initial setup with the most control over ongoing interaction.
+For Deware, the recommended approach is to use Chitin for the initial registration call and then interact with the registry contracts directly via viem for ongoing reads and reputation writes. This gives the fastest initial setup with the most control over ongoing interaction.
 
 Network: Base Sepolia testnet. Gas is free via the Base Sepolia faucet. Contract addresses for the Identity Registry and Reputation Registry are deterministic CREATE2 addresses — the same across all chains where they are deployed.
 
@@ -472,7 +472,7 @@ Required by ERC-8004 bounty and Agent Only bounty. One file per robot. Stored in
 
 ```
 schemaVersion          String   "1.0" — version of this manifest schema
-agentName              String   Human-readable name, e.g. "SwarmTrust-Scout-1"
+agentName              String   Human-readable name, e.g. "Deware-Scout-1"
 agentType              String   "warehouse-simulation-agent"
 operatorWallet         Address  The Ethereum address that owns/deployed this agent
 erc8004TokenId         String   Token ID returned from ERC-8004 registration
@@ -762,7 +762,7 @@ Tasks:
 ## 17. Known Risks & Mitigations
 
 ### Risk 1: Lit Protocol / Vincent network transition
-Not applicable — SwarmTrust does not use Lit Protocol or Vincent. This risk was deliberately avoided.
+Not applicable — Deware does not use Lit Protocol or Vincent. This risk was deliberately avoided.
 
 ### Risk 2: ERC-8004 SDK documentation quality
 The multiple available SDKs (Chitin, @agentic-trust/8004-ext-sdk) have varying documentation quality. Mitigation: Use Chitin for registration only. Use viem directly for all ongoing reads and writes to the registry contracts — viem requires ABI and contract address, which are stable and available from the EIP specification.
@@ -786,7 +786,7 @@ If the demo needs to be run multiple times (for video recording retakes), reputa
 
 ## Project Name
 
-**SwarmTrust**
+**Deware**
 
 Tagline: *Autonomous robots. Verified trust. Machine payments. No humans required.*
 
