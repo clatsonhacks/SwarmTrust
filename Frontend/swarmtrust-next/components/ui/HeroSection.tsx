@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect } from 'react'
+import { ShootingStars } from '@/components/ui/shooting-stars'
+import { StarsBackground } from '@/components/ui/stars-background'
 
 function splitChars(el: HTMLElement): HTMLElement[] {
   const nodes = Array.from(el.childNodes)
@@ -95,6 +97,8 @@ export default function HeroSection() {
 
       {/* Bee scene is rendered at page level */}
       <div className="hero-canvas-wrap" />
+      <StarsBackground starDensity={0.0002} />
+      <ShootingStars minSpeed={14} maxSpeed={24} minDelay={600} maxDelay={2000} starCount={5} />
       <div className="hero-vignette" aria-hidden="true" />
 
       <div className="hero-ui">
@@ -114,7 +118,7 @@ export default function HeroSection() {
         </h1>
 
         <div className="hero-foot" id="heroFoot" style={{ opacity: 0 }}>
-          <p className="hero-tagline" text-xm id="heroTag">
+          <p className="hero-tagline" text-xs id="heroTag">
             The warehouse runs itself. Five robots coordinate, pay each other, and earn trust on-chain — no human in the loop.
           </p>
           <div className="hero-actions" id="heroCta"
