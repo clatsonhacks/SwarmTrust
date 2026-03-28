@@ -275,6 +275,19 @@ async function delegateSubtask(
       state.usdcBalance = Math.max(0, parseFloat(state.usdcBalance) - 0.01).toFixed(6);
       await setRobotState(redis, state);
 
+      // Update session stats — USDC transferred
+      await redis.hincrbyfloat('session:stats', 'totalUsdcTransferred', 0.01);
+
+      // Publish payment event so the frontend can render beams
+      await publishEvent(redis, {
+        robotId,
+        type: 'PAYMENT_SENT',
+        state: state.behaviorState,
+        taskId: subtask.subTaskId,
+        payload: { to: peer.agentId, amountUsdc: '0.010000', txHash: paymentResponse ?? '' },
+        timestamp: Date.now(),
+      });
+
       // Release zone lock we may have acquired for delegation
       if (subtask.irreversible && destinationZone !== null) {
         await releaseZoneLock(redis, destinationZone);
@@ -287,6 +300,19 @@ async function delegateSubtask(
         tokenId: peer.tokenId.toString(),
         delta: 80,
         ...(feedbackTxHash !== undefined ? { txHash: feedbackTxHash } : {}),
+      });
+
+      // Update session stats — on-chain tx + reputation write
+      await redis.hincrby('session:stats', 'onChainTransactionCount', 1);
+      await redis.hincrby('session:stats', 'reputationUpdatesWritten', 1);
+
+      // Publish reputation update so the frontend bar updates
+      await publishEvent(redis, {
+        robotId: peer.agentId as typeof robotId,
+        type: 'REPUTATION_UPDATED',
+        state: state.behaviorState,
+        payload: { from: robotId, delta: 80, txHash: feedbackTxHash ?? '' },
+        timestamp: Date.now(),
       });
 
       return 'success';
@@ -324,6 +350,13 @@ async function delegateSubtask(
           delta: -50,
           reason: 'timeout',
           ...(feedbackTxHash !== undefined ? { txHash: feedbackTxHash } : {}),
+        });
+        await publishEvent(redis, {
+          robotId: peer.agentId as typeof robotId,
+          type: 'REPUTATION_UPDATED',
+          state: state.behaviorState,
+          payload: { from: robotId, delta: -50, reason: 'timeout', txHash: feedbackTxHash ?? '' },
+          timestamp: Date.now(),
         });
       } catch { /* best-effort */ }
     }
