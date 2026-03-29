@@ -1,9 +1,14 @@
-export type RobotId =
-  | 'scout-1'
-  | 'lifter-2'
-  | 'scout-3'
-  | 'carrier-4'
-  | 'lifter-5';
+// Widened to string to support dynamically spawned robots.
+// Static robot IDs are preserved in STATIC_ROBOT_IDS for orchestrator startup.
+export type RobotId = string;
+
+export const STATIC_ROBOT_IDS: RobotId[] = [
+  'scout-1',
+  'lifter-2',
+  'scout-3',
+  'carrier-4',
+  'lifter-5',
+];
 
 export type RobotBehaviorState =
   | 'IDLE'

@@ -1,14 +1,17 @@
 import 'dotenv/config';
+import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import pino from 'pino';
 import { createRedisClient } from '../shared/redis/client.js';
 import { initialTasks } from './tasks.config.js';
-import type { WsMessage, WsSessionStats, RobotId } from '../shared/types/index.js';
+import { spawnRobot } from '../spawner/index.js';
+import type { WsMessage, WsSessionStats, WsRobotSpawned } from '../shared/types/index.js';
+import { STATIC_ROBOT_IDS } from '../shared/types/index.js';
 
 const log = pino({ level: 'info' });
 
 const WS_PORT = 8080;
-const ROBOT_IDS: RobotId[] = ['scout-1', 'lifter-2', 'scout-3', 'carrier-4', 'lifter-5'];
+const API_PORT = 3000;
 const ROBOT_POLL_TIMEOUT_MS = 30_000;
 const ROBOT_POLL_INTERVAL_MS = 2_000;
 const TASK_REFILL_INTERVAL_MS = 15_000;
@@ -18,6 +21,9 @@ const TASK_REFILL_THRESHOLD = 3;
 // ── Redis clients ──────────────────────────────────────────────────────────────
 const redis = createRedisClient();
 const redisSub = createRedisClient(); // separate client for subscriptions
+
+// ── Active robot registry — grows as robots spawn ────────────────────────────
+const activeRobots = new Set<string>(STATIC_ROBOT_IDS);
 
 // ── WebSocket server ───────────────────────────────────────────────────────────
 const wss = new WebSocketServer({ port: WS_PORT });
@@ -48,23 +54,24 @@ function initWebSocket(): void {
   log.info({ port: WS_PORT }, 'WebSocket server listening');
 }
 
-// ── Step 3: Wait for robots to register ───────────────────────────────────────
+// ── Step 3: Wait for static robots to register ────────────────────────────────
 async function waitForRobots(): Promise<void> {
-  log.info('Waiting for robots to register...');
+  log.info({ count: activeRobots.size }, 'Waiting for robots to register...');
   const deadline = Date.now() + ROBOT_POLL_TIMEOUT_MS;
+  const ids = [...activeRobots];
 
   while (Date.now() < deadline) {
     const results = await Promise.all(
-      ROBOT_IDS.map((id) => redis.exists(`robot:${id}:state`))
+      ids.map((id) => redis.exists(`robot:${id}:state`))
     );
     const onlineCount = results.filter(Boolean).length;
 
-    if (onlineCount === ROBOT_IDS.length) {
-      log.info('All 5 robots online');
+    if (onlineCount === ids.length) {
+      log.info({ count: ids.length }, 'All robots online');
       return;
     }
 
-    log.info({ onlineCount, total: ROBOT_IDS.length }, 'Robots not yet ready, polling...');
+    log.info({ onlineCount, total: ids.length }, 'Robots not yet ready, polling...');
     await new Promise((r) => setTimeout(r, ROBOT_POLL_INTERVAL_MS));
   }
 
@@ -177,6 +184,71 @@ function startStatsBroadcaster(): void {
   log.info({ intervalMs: STATS_BROADCAST_INTERVAL_MS }, 'Stats broadcaster started');
 }
 
+// ── REST API for dynamic robot spawning ───────────────────────────────────────
+function startApiServer(): void {
+  const app = express();
+  app.use(express.json());
+
+  /**
+   * POST /api/spawn-robot
+   * Body: { capabilities: string[], name?: string }
+   * Returns the new robot's metadata once it is fully online (~10–20s).
+   */
+  app.post('/api/spawn-robot', async (req, res) => {
+    const { capabilities, name } = req.body as {
+      capabilities?: string[];
+      name?: string;
+    };
+
+    if (!Array.isArray(capabilities) || capabilities.length === 0) {
+      res.status(400).json({ error: 'capabilities must be a non-empty array' });
+      return;
+    }
+
+    const valid = ['NAVIGATE', 'SCAN', 'LIFT', 'CARRY'];
+    const invalid = capabilities.filter((c) => !valid.includes(c));
+    if (invalid.length > 0) {
+      res.status(400).json({ error: `Unknown capabilities: ${invalid.join(', ')}` });
+      return;
+    }
+
+    log.info({ capabilities, name }, 'Spawn robot request received');
+
+    try {
+      const result = await spawnRobot(redis, capabilities, name);
+
+      // Track in active robot set
+      activeRobots.add(result.robotId);
+
+      // Broadcast to frontend
+      const message: WsRobotSpawned = {
+        type: 'ROBOT_SPAWNED',
+        robotId: result.robotId,
+        name: result.name,
+        capabilities: result.capabilities,
+        walletAddress: result.walletAddress,
+        tokenId: result.tokenId,
+        reputationScore: 85, // bootstrap trust (same as peerSelector default for new agents)
+        usdcBalance: result.usdcBalance,
+        port: result.port,
+        endpoint: result.endpoint,
+        timestamp: Date.now(),
+      };
+      broadcast(message);
+
+      log.info({ robotId: result.robotId }, 'Robot spawned and broadcast sent');
+      res.status(201).json(result);
+    } catch (err) {
+      log.error({ err }, 'Failed to spawn robot');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.listen(API_PORT, () => {
+    log.info({ port: API_PORT }, 'Orchestrator API server listening');
+  });
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main(): Promise<void> {
   log.info('Orchestrator starting...');
@@ -188,6 +260,7 @@ async function main(): Promise<void> {
   await startPubSubForwarder();
   startTaskGenerator();
   startStatsBroadcaster();
+  startApiServer();
 
   log.info('Orchestrator fully initialized');
 

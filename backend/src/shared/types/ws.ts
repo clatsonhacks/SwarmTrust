@@ -9,7 +9,8 @@ export type WsMessageType =
   | 'TASK_ASSIGNED'
   | 'TASK_COMPLETE'
   | 'LOG_ENTRY'
-  | 'SESSION_STATS';
+  | 'SESSION_STATS'
+  | 'ROBOT_SPAWNED';
 
 export interface WsRobotPositionUpdate {
   type: 'ROBOT_POSITION_UPDATE';
@@ -73,6 +74,20 @@ export interface WsSessionStats {
   timestamp: number;
 }
 
+export interface WsRobotSpawned {
+  type: 'ROBOT_SPAWNED';
+  robotId: string;
+  name: string;
+  capabilities: string[];
+  walletAddress: string;
+  tokenId: string;
+  reputationScore: number;
+  usdcBalance: string;
+  port: number;
+  endpoint: string;
+  timestamp: number;
+}
+
 export type WsMessage =
   | WsRobotPositionUpdate
   | WsRobotStateChange
@@ -81,4 +96,5 @@ export type WsMessage =
   | WsTaskAssigned
   | WsTaskComplete
   | WsLogEntry
-  | WsSessionStats;
+  | WsSessionStats
+  | WsRobotSpawned;

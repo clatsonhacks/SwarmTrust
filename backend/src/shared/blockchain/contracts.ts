@@ -173,6 +173,101 @@ export async function getUsdcBalance(address: `0x${string}`): Promise<string> {
 }
 
 /**
+ * Send native ETH from fromAccount to toAddress (for gas funding).
+ * amountEth is a human-readable decimal (e.g. 0.005).
+ */
+export async function sendEth(
+  fromAccount: PrivateKeyAccount,
+  toAddress: `0x${string}`,
+  amountEth: number,
+): Promise<`0x${string}`> {
+  const publicClient = makePublicClient();
+  const walletClient = makeWalletClient(fromAccount);
+  const value = BigInt(Math.round(amountEth * 1e18));
+
+  const nonceBefore = await publicClient.getTransactionCount({
+    address: fromAccount.address,
+    blockTag: 'latest',
+  });
+
+  const txHash = await walletClient.sendTransaction({
+    to: toAddress,
+    value,
+    chain: baseSepolia,
+    account: fromAccount,
+  });
+
+  await publicClient.waitForTransactionReceipt({ hash: txHash });
+
+  // Wait until every load-balanced node reflects the confirmed nonce
+  for (let i = 0; i < 15; i++) {
+    const nonceNow = await publicClient.getTransactionCount({
+      address: fromAccount.address,
+      blockTag: 'latest',
+    });
+    if (nonceNow > nonceBefore) break;
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+
+  return txHash;
+}
+
+const erc20TransferAbi = [
+  {
+    inputs: [
+      { internalType: 'address', name: 'to', type: 'address' },
+      { internalType: 'uint256', name: 'amount', type: 'uint256' },
+    ],
+    name: 'transfer',
+    outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+] as const;
+
+/**
+ * Transfer USDC from fromAccount to toAddress.
+ * amountUsdc is a human-readable decimal (e.g. 0.5 = 500_000 micro-USDC).
+ */
+export async function transferUsdc(
+  fromAccount: PrivateKeyAccount,
+  toAddress: `0x${string}`,
+  amountUsdc: number,
+): Promise<`0x${string}`> {
+  const publicClient = makePublicClient();
+  const walletClient = makeWalletClient(fromAccount);
+  const amount = BigInt(Math.round(amountUsdc * 1_000_000));
+
+  const nonceBefore = await publicClient.getTransactionCount({
+    address: fromAccount.address,
+    blockTag: 'latest',
+  });
+
+  const txHash = await walletClient.writeContract({
+    address: USDC_ADDRESS,
+    abi: erc20TransferAbi,
+    functionName: 'transfer',
+    args: [toAddress, amount],
+    chain: baseSepolia,
+    account: fromAccount,
+  });
+
+  await publicClient.waitForTransactionReceipt({ hash: txHash });
+
+  // Wait until every load-balanced node reflects the confirmed nonce
+  for (let i = 0; i < 15; i++) {
+    const nonceNow = await publicClient.getTransactionCount({
+      address: fromAccount.address,
+      blockTag: 'latest',
+    });
+    if (nonceNow > nonceBefore) break;
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+
+  return txHash;
+}
+
+/**
  * Compute a 0–100 reputation score.
  * Returns null if no feedback exists yet (new agent).
  */
