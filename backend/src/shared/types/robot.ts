@@ -23,6 +23,8 @@ export interface RobotPosition {
   z: number;
 }
 
+export type RobotCapability = 'NAVIGATE' | 'SCAN' | 'LIFT' | 'CARRY';
+
 export interface RobotState {
   robotId: RobotId;
   position: RobotPosition;
@@ -31,4 +33,5 @@ export interface RobotState {
   reputationScore: number;
   usdcBalance: string;        // stored as string to avoid float precision issues
   lastUpdated: number;        // Unix timestamp (ms)
+  capabilities: RobotCapability[];  // robot capabilities from manifest
 }

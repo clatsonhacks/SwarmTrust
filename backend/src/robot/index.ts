@@ -76,6 +76,7 @@ let state: RobotState = {
   reputationScore: 100,
   usdcBalance: '0',
   lastUpdated: Date.now(),
+  capabilities: manifest.capabilities,
 };
 
 async function updateState(patch: Partial<RobotState>): Promise<void> {

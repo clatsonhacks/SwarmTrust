@@ -7,17 +7,21 @@
  * Now with Among Us-style communication system!
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import Loader from '@/components/ui/Loader'
 import AgentPanel from '@/components/ui/AgentPanel'
 import ToastNotification from '@/components/ui/ToastNotification'
 import CommunicationLog from '@/components/ui/CommunicationLog'
 import AlertOverlay from '@/components/ui/AlertOverlay'
+import TaskManager from '@/components/ui/TaskManager'
+import AgentInventory from '@/components/ui/AgentInventory'
 import { useAgentStore } from '@/lib/agentStore'
 import { useBackendSocket } from '@/lib/useBackendSocket'
+import { useBackendApi } from '@/lib/useBackendApi'
 import { useCommunication } from '@/lib/useCommunication'
 import type { ZoneName } from '@/lib/types'
+import type { Task } from '@/lib/agentStore'
 
 const DepartmentOverview = dynamic(() => import('@/components/scene/DepartmentOverview'), { ssr: false })
 const DepartmentScene    = dynamic(() => import('@/components/scene/DepartmentScene'), { ssr: false })
@@ -29,9 +33,56 @@ export default function WarehousePage() {
 
   const currentView = useAgentStore(s => s.currentView)
   const connected   = useAgentStore(s => s.connected)
+  const tasks = useAgentStore(s => s.tasks)
+  const agentInventory = useAgentStore(s => s.agentInventory)
+  const addTask = useAgentStore(s => s.addTask)
+  const addAgentToInventory = useAgentStore(s => s.addAgentToInventory)
 
   useBackendSocket()
   const { commLog, toasts, removeToast } = useCommunication()
+  const { createTask, spawnAgent, fetchAllAgents } = useBackendApi()
+
+  // Fetch initial agent inventory
+  useEffect(() => {
+    const loadAgents = async () => {
+      const agents = await fetchAllAgents()
+      if (agents.length > 0) {
+        useAgentStore.getState().setAgentInventory(agents)
+      }
+    }
+    loadAgents()
+  }, [fetchAllAgents])
+
+  // Handle task creation
+  const handleTaskCreate = async (taskData: Omit<Task, 'taskId' | 'createdAt' | 'status'>) => {
+    const taskId = `task-${Date.now()}`
+    const task: Task = {
+      ...taskData,
+      taskId,
+      status: 'pending',
+      createdAt: new Date(),
+    }
+    addTask(task)
+
+    // Send to backend
+    const success = await createTask(taskData)
+    if (!success) {
+      console.error('Failed to create task in backend')
+    }
+  }
+
+  // Handle agent spawning
+  const handleSpawnAgent = async (capabilities: string[]) => {
+    const result = await spawnAgent(capabilities)
+    if (result) {
+      setAlertData({
+        title: 'Agent Spawned',
+        message: `New agent ${result.robotId} with capabilities [${capabilities.join(', ')}] has been deployed.`,
+        icon: '🤖'
+      })
+      setAlertOpen(true)
+    }
+  }
 
   // Demo alert after 15 seconds
   useState(() => {
@@ -77,6 +128,12 @@ export default function WarehousePage() {
 
       {/* Communication Log */}
       <CommunicationLog entries={commLog} />
+
+      {/* Task Manager */}
+      <TaskManager tasks={tasks} onTaskCreate={handleTaskCreate} />
+
+      {/* Agent Inventory */}
+      <AgentInventory agents={agentInventory} onSpawnAgent={handleSpawnAgent} />
 
       {/* Live backend connection indicator */}
       <div style={{

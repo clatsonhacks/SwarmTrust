@@ -62,21 +62,60 @@ export function useBackendSocket() {
 
         switch (msg.type) {
 
+          // Backend publishes RobotEvent with type='ROBOT_POSITION_UPDATE'
+          case 'ROBOT_POSITION_UPDATE': {
+            const robotId = msg.robotId as string
+            const position = msg.position as { x: number; y: number; z: number }
+            store.updateAgentInventoryItem(robotId, { position, lastUpdated: Date.now() })
+            break
+          }
+
           // Backend publishes RobotEvent with type='STATE_CHANGED'
+          case 'ROBOT_STATE_CHANGE':
           case 'STATE_CHANGED': {
-            const agentId = ROBOT_TO_AGENT[msg.robotId as string]
-            if (!agentId) break
-            const state = STATE_MAP[msg.state as string] ?? 'IDLE'
-            store.setAgentState(agentId, state, (msg.taskId as string | null) ?? '')
+            const robotId = msg.robotId as string
+            const agentId = ROBOT_TO_AGENT[robotId]
+            const backendState = msg.state as string
+            const behaviorState = backendState as any
+
+            // Update inventory
+            store.updateAgentInventoryItem(robotId, {
+              behaviorState,
+              currentTaskId: (msg.taskId as string | null) ?? null,
+              lastUpdated: Date.now()
+            })
+
+            // Update 3D agents if mapped
+            if (agentId) {
+              const state = STATE_MAP[backendState] ?? 'IDLE'
+              store.setAgentState(agentId, state, (msg.taskId as string | null) ?? '')
+            }
+            break
+          }
+
+          // Backend publishes RobotEvent with type='TASK_ASSIGNED'
+          case 'TASK_ASSIGNED': {
+            const taskId = msg.taskId as string
+            const robotId = msg.robotId as string
+            store.updateTaskStatus(taskId, 'executing')
+            store.addLog(
+              `<b class="acc">→ ASSIGNED</b> · ${taskId} → ${robotId}`,
+              'info',
+            )
             break
           }
 
           // Backend publishes RobotEvent with type='TASK_COMPLETED'
+          case 'TASK_COMPLETE':
           case 'TASK_COMPLETED': {
-            const agentId = ROBOT_TO_AGENT[msg.robotId as string]
+            const robotId = msg.robotId as string
+            const taskId = msg.taskId as string
+            const agentId = ROBOT_TO_AGENT[robotId]
+
             if (agentId) store.setAgentState(agentId, 'IDLE', '')
+            store.updateTaskStatus(taskId, 'completed')
             store.addLog(
-              `<b class="acc">✓ DONE</b> · ${msg.robotId} · ${msg.taskId}`,
+              `<b class="acc">✓ DONE</b> · ${robotId} · ${taskId}`,
               'info',
             )
             break
@@ -117,6 +156,57 @@ export function useBackendSocket() {
               (payload.delta > 0 ? ` <span style="color:#1aff88">+${payload.delta}</span>` : ` <span style="color:#ff4466">${payload.delta}</span>`),
               'chain',
             )
+            break
+          }
+
+          // Backend publishes when a new robot is spawned
+          case 'ROBOT_SPAWNED': {
+            const robot = msg.robot as {
+              robotId: string
+              capabilities: string[]
+              walletAddress: string
+              endpoint: string
+            }
+            store.addAgentToInventory({
+              robotId: robot.robotId,
+              capabilities: robot.capabilities,
+              position: { x: 0, y: 0, z: 0 },
+              behaviorState: 'IDLE',
+              currentTaskId: null,
+              reputationScore: 85,
+              usdcBalance: '1.0',
+              walletAddress: robot.walletAddress,
+              lastUpdated: Date.now()
+            })
+            store.addLog(
+              `<b class="acc">🤖 SPAWNED</b> · ${robot.robotId} · [${robot.capabilities.join(', ')}]`,
+              'info',
+            )
+            break
+          }
+
+          // Peer delegation events (for communication log)
+          case 'PEER_DELEGATION': {
+            const fromRobotId = msg.robotId as string
+            const payload = msg.payload as { to: string; subTaskId: string; capability: string }
+            const toRobotId = payload?.to
+
+            if (fromRobotId && toRobotId) {
+              store.addLog(
+                `<b class="pay">DELEGATE</b> · <b>${fromRobotId}</b> → <b>${toRobotId}</b> · ${payload.capability}`,
+                'payment',
+              )
+            }
+            break
+          }
+
+          // Log entry events
+          case 'LOG_ENTRY': {
+            const logMsg = msg.message as string
+            const logType = (msg.logType as string || 'info') as any
+            if (logMsg) {
+              store.addLog(logMsg, logType)
+            }
             break
           }
 

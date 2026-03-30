@@ -189,6 +189,170 @@ function startApiServer(): void {
   const app = express();
   app.use(express.json());
 
+  // Enable CORS for all routes
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(200);
+      return;
+    }
+
+    next();
+  });
+
+  /**
+   * GET /api/robots
+   * Returns all registered robot states from Redis
+   */
+  app.get('/api/robots', async (req, res) => {
+    try {
+      const robotIds = [...activeRobots];
+      const states = await Promise.all(
+        robotIds.map(async (robotId) => {
+          const raw = await redis.hgetall(`robot:${robotId}:state`);
+          if (!raw || Object.keys(raw).length === 0) return null;
+
+          let capabilities: string[] = [];
+          try {
+            capabilities = raw.capabilities ? JSON.parse(raw.capabilities) : [];
+          } catch {
+            capabilities = [];
+          }
+
+          return {
+            robotId,
+            position: {
+              x: parseFloat(raw.positionX ?? '0'),
+              y: parseFloat(raw.positionY ?? '0'),
+              z: parseFloat(raw.positionZ ?? '0'),
+            },
+            currentTaskId: raw.currentTaskId || null,
+            behaviorState: raw.behaviorState || 'IDLE',
+            reputationScore: parseInt(raw.reputationScore ?? '85', 10),
+            usdcBalance: raw.usdcBalance || '0',
+            lastUpdated: parseInt(raw.lastUpdated ?? '0', 10),
+            capabilities,
+          };
+        })
+      );
+
+      const validStates = states.filter((s) => s !== null);
+      res.json(validStates);
+    } catch (err) {
+      log.error({ err }, 'Failed to fetch robot states');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  /**
+   * GET /api/robot/:robotId/state
+   * Returns a single robot's state
+   */
+  app.get('/api/robot/:robotId/state', async (req, res) => {
+    try {
+      const { robotId } = req.params;
+      const raw = await redis.hgetall(`robot:${robotId}:state`);
+
+      if (!raw || Object.keys(raw).length === 0) {
+        res.status(404).json({ error: 'Robot not found' });
+        return;
+      }
+
+      let capabilities: string[] = [];
+      try {
+        capabilities = raw.capabilities ? JSON.parse(raw.capabilities) : [];
+      } catch {
+        capabilities = [];
+      }
+
+      const state = {
+        robotId,
+        position: {
+          x: parseFloat(raw.positionX ?? '0'),
+          y: parseFloat(raw.positionY ?? '0'),
+          z: parseFloat(raw.positionZ ?? '0'),
+        },
+        currentTaskId: raw.currentTaskId || null,
+        behaviorState: raw.behaviorState || 'IDLE',
+        reputationScore: parseInt(raw.reputationScore ?? '85', 10),
+        usdcBalance: raw.usdcBalance || '0',
+        lastUpdated: parseInt(raw.lastUpdated ?? '0', 10),
+        capabilities,
+      };
+
+      res.json(state);
+    } catch (err) {
+      log.error({ err }, 'Failed to fetch robot state');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  /**
+   * POST /api/task
+   * Body: { description, sourceZone, destinationZone, priority, assignedTo? }
+   * Creates a new task and adds it to the queue
+   */
+  app.post('/api/task', async (req, res) => {
+    const { description, sourceZone, destinationZone, priority, assignedTo } = req.body as {
+      description?: string;
+      sourceZone?: string;
+      destinationZone?: string;
+      priority?: string;
+      assignedTo?: string;
+    };
+
+    if (!description || !sourceZone || !destinationZone || !priority) {
+      res.status(400).json({
+        error: 'Missing required fields: description, sourceZone, destinationZone, priority',
+      });
+      return;
+    }
+
+    const validZones = ['INTAKE', 'STORAGE', 'SORTING', 'STAGING', 'DISPATCH', 'CHARGING'];
+    const validPriorities = ['low', 'normal', 'high', 'urgent'];
+
+    if (!validZones.includes(sourceZone) || !validZones.includes(destinationZone)) {
+      res.status(400).json({ error: 'Invalid zone. Valid zones: ' + validZones.join(', ') });
+      return;
+    }
+
+    if (!validPriorities.includes(priority)) {
+      res.status(400).json({
+        error: 'Invalid priority. Valid priorities: ' + validPriorities.join(', '),
+      });
+      return;
+    }
+
+    try {
+      // Generate task ID
+      const queueLength = await redis.llen('tasks:queue');
+      const taskId = `task-${String(queueLength + 1).padStart(3, '0')}`;
+
+      const task = {
+        taskId,
+        description,
+        sourceZone,
+        destinationZone,
+        priority,
+        assignedTo: assignedTo || undefined,
+        createdAt: Date.now(),
+      };
+
+      // Add to Redis queue
+      await redis.rpush('tasks:queue', JSON.stringify(task));
+
+      log.info({ taskId, description }, 'Task created via API');
+      res.status(201).json({ success: true, taskId, task });
+    } catch (err) {
+      log.error({ err }, 'Failed to create task');
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
   /**
    * POST /api/spawn-robot
    * Body: { capabilities: string[], name?: string }

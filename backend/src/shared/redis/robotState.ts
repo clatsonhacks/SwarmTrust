@@ -17,6 +17,7 @@ export async function setRobotState(redis: Redis, state: RobotState): Promise<vo
     reputationScore: state.reputationScore,
     usdcBalance: state.usdcBalance,
     lastUpdated: state.lastUpdated,
+    capabilities: JSON.stringify(state.capabilities),
   });
 }
 
@@ -24,6 +25,13 @@ export async function getRobotState(redis: Redis, robotId: RobotId): Promise<Rob
   const key = stateKey(robotId);
   const data = await redis.hgetall(key);
   if (!data || !data.robotId) return null;
+
+  let capabilities: string[] = [];
+  try {
+    capabilities = data.capabilities ? JSON.parse(data.capabilities) : [];
+  } catch {
+    capabilities = [];
+  }
 
   return {
     robotId: data.robotId as RobotId,
@@ -37,5 +45,6 @@ export async function getRobotState(redis: Redis, robotId: RobotId): Promise<Rob
     reputationScore: parseFloat(data.reputationScore ?? '0'),
     usdcBalance: data.usdcBalance ?? '0',
     lastUpdated: parseInt(data.lastUpdated ?? '0'),
+    capabilities: capabilities as RobotState['capabilities'],
   };
 }

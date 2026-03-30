@@ -146,6 +146,32 @@ export interface ActiveComm {
   startTime: number
 }
 
+// Task management
+export interface Task {
+  taskId: string
+  description: string
+  sourceZone: ZoneName
+  destinationZone: ZoneName
+  priority: 'low' | 'normal' | 'high' | 'urgent'
+  assignedTo?: string
+  status: 'pending' | 'executing' | 'completed' | 'failed'
+  createdAt: Date
+}
+
+// Agent inventory (backend robot data)
+export interface AgentInventoryItem {
+  robotId: string
+  capabilities: string[]
+  position: { x: number; y: number; z: number }
+  behaviorState: 'IDLE' | 'MOVING' | 'EXECUTING' | 'WAITING' | 'WAITING_PAYMENT'
+  currentTaskId: string | null
+  reputationScore: number
+  usdcBalance: string
+  zone?: ZoneName
+  walletAddress?: string
+  lastUpdated: number
+}
+
 interface SimStore {
   agents:        AgentRuntime[]
   log:           LogEntry[]
@@ -166,6 +192,12 @@ interface SimStore {
   // View state for department navigation
   currentView:   ViewState
 
+  // Task management
+  tasks:         Task[]
+
+  // Agent inventory
+  agentInventory: AgentInventoryItem[]
+
   // Actions called from the animation loop
   tick:           (dt: number) => void
   triggerMeeting: () => void
@@ -185,6 +217,16 @@ interface SimStore {
   setAgentTask:      (agentId: string, task: string) => void
   setAgentReputation:(agentId: string, score: number) => void
   updateStats:       (stats: { tasksDone: number; totalUSDC: number; totalTx: number }) => void
+
+  // Task management actions
+  addTask:           (task: Task) => void
+  updateTaskStatus:  (taskId: string, status: Task['status']) => void
+  removeTask:        (taskId: string) => void
+
+  // Agent inventory actions
+  setAgentInventory: (agents: AgentInventoryItem[]) => void
+  updateAgentInventoryItem: (robotId: string, updates: Partial<AgentInventoryItem>) => void
+  addAgentToInventory: (agent: AgentInventoryItem) => void
 }
 
 let logCounter = 0
@@ -204,6 +246,8 @@ export const useAgentStore = create<SimStore>((set, get) => ({
   activeComms:   [],
   currentView:   'OVERVIEW',
   connected:     false,
+  tasks:         [],
+  agentInventory: [],
 
   setView(view: ViewState) {
     set({ currentView: view })
@@ -246,6 +290,40 @@ export const useAgentStore = create<SimStore>((set, get) => ({
 
   updateStats({ tasksDone, totalUSDC, totalTx }) {
     set({ tasksDone, totalUSDC, totalTx })
+  },
+
+  // ── Task management actions ───────────────────────────────────
+
+  addTask(task: Task) {
+    set(st => ({ tasks: [task, ...st.tasks] }))
+  },
+
+  updateTaskStatus(taskId: string, status: Task['status']) {
+    set(st => ({
+      tasks: st.tasks.map(t => t.taskId === taskId ? { ...t, status } : t)
+    }))
+  },
+
+  removeTask(taskId: string) {
+    set(st => ({ tasks: st.tasks.filter(t => t.taskId !== taskId) }))
+  },
+
+  // ── Agent inventory actions ───────────────────────────────────
+
+  setAgentInventory(agents: AgentInventoryItem[]) {
+    set({ agentInventory: agents })
+  },
+
+  updateAgentInventoryItem(robotId: string, updates: Partial<AgentInventoryItem>) {
+    set(st => ({
+      agentInventory: st.agentInventory.map(a =>
+        a.robotId === robotId ? { ...a, ...updates } : a
+      )
+    }))
+  },
+
+  addAgentToInventory(agent: AgentInventoryItem) {
+    set(st => ({ agentInventory: [...st.agentInventory, agent] }))
   },
 
   addLog(msg, type = 'info') {
