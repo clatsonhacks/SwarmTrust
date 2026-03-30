@@ -9,6 +9,11 @@ import { SkeletonUtils } from 'three-stdlib'
 import { useAgentStore, DEPARTMENT_CONFIGS } from '@/lib/agentStore'
 import type { ZoneName, AgentState } from '@/lib/types'
 import TrustBeam from './TrustBeam'
+import SpeechBubble from './SpeechBubble'
+import CommBeam from './CommBeam'
+
+// ── Constants ─────────────────────────────────────────────────────────
+const COMM_DURATION = 2000 // 2 seconds for communication
 
 // ── Loading indicator ─────────────────────────────────────────────────
 function Loader() {
@@ -699,6 +704,7 @@ function DepartmentSceneContent({
   const tick    = useAgentStore(s => s.tick)
   const agents  = useAgentStore(s => s.agents)
   const beams   = useAgentStore(s => s.activeBeams)
+  const activeComms = useAgentStore(s => s.activeComms)
   const config  = DEPARTMENT_CONFIGS[department]
 
   const { scene: warehouseScene } = useGLTF(config.environmentModel)
@@ -903,6 +909,42 @@ function DepartmentSceneContent({
         )
       })}
 
+      {/* Speech Bubbles and Connection Beams for active communications */}
+      {activeComms.map((comm) => {
+        // Find agents involved in this communication
+        const fromAgent = deptAgents.find(a => a.id === comm.fromId)
+        const toAgent = deptAgents.find(a => a.id === comm.toId)
+
+        if (!fromAgent || !toAgent) return null
+
+        // Get agent positions (use their current position from store)
+        const fromPos = fromAgent.position
+        const toPos = toAgent.position
+
+        // Midpoint between agents for speech bubble
+        const midX = (fromPos[0] + toPos[0]) / 2
+        const midZ = (fromPos[2] + toPos[2]) / 2
+
+        return (
+          <group key={comm.id}>
+            {/* Connection beam between agents */}
+            <CommBeam
+              from={fromPos}
+              to={toPos}
+              color={fromAgent.color}
+            />
+
+            {/* Speech bubble at midpoint */}
+            <SpeechBubble
+              message={comm.message}
+              position={[midX, 2.5, midZ]}
+              color={fromAgent.color}
+              duration={COMM_DURATION}
+            />
+          </group>
+        )
+      })}
+
       {beamElements}
     </>
   )
@@ -962,8 +1004,8 @@ export default function DepartmentScene({ department }: { department: ZoneName }
 }
 
 // Preload models
-useGLTF.preload('/models/21948_autosave.glb')
+useGLTF.preload('/models/21948_autosave.gltf')
 useGLTF.preload('/models/box-02_robot.glb')
 useGLTF.preload('/models/turret_droid.glb')
 useGLTF.preload('/models/combat_steampunk_robot.glb')
-useGLTF.preload('/models/nora.glb')
+useGLTF.preload('/models/bee.glb')

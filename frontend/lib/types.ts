@@ -1,7 +1,7 @@
 // Shared types for the SwarmTrust simulation
 
 export type AgentType  = 'SCOUT' | 'LIFTER' | 'CARRIER'
-export type AgentState = 'IDLE' | 'MOVING' | 'EXECUTING' | 'MEETING' | 'DELEGATING'
+export type AgentState = 'IDLE' | 'MOVING' | 'EXECUTING' | 'MEETING' | 'DELEGATING' | 'COMMUNICATING'
 export type ZoneName   = 'INTAKE' | 'STORAGE' | 'STAGING' | 'DISPATCH'
 
 export interface AgentDef {

@@ -40,7 +40,7 @@ export const DEPARTMENT_CONFIGS: Record<ZoneName, DepartmentConfig> = {
     color: '#0d2a1a',
     glow: '#1aff88',
     agentIds: ['R1', 'R5'],
-    agentScale: 1.0,
+    agentScale: 55,
     // From Blender camera: CAM_Intake_Bay
     cameraPos: [0, 6, 7.59] as [number, number, number],
     cameraTarget: [0, 3, 0] as [number, number, number],
@@ -69,20 +69,20 @@ export const DEPARTMENT_CONFIGS: Record<ZoneName, DepartmentConfig> = {
     glow: '#ffcc44',
     agentIds: ['R3'],
     agentScale: 1.0,
-    // From Blender camera: CAM_Sorting_Zone
-    cameraPos: [-14, 6, 45.34] as [number, number, number],
-    cameraTarget: [-10, 3, 35] as [number, number, number],
+    // From Blender camera: CAM_Charging_Station (better positioned inside warehouse)
+    cameraPos: [30.63, 6, 57.73] as [number, number, number],
+    cameraTarget: [20, 3, 45] as [number, number, number],
   },
   DISPATCH: {
     name: 'DISPATCH',
     title: 'Dispatch Hub',
     description: 'Final processing and shipment coordination',
-    agentModel: '/models/nora.glb',
+    agentModel: '/models/bee.glb',
     environmentModel: '/models/21948_autosave.gltf',
     color: '#2a0e0e',
     glow: '#ff5566',
     agentIds: ['R4'],
-    agentScale: 0.5,
+    agentScale: 0.8,
     // From Blender camera: CAM_Dispatch
     cameraPos: [-21.17, 6, 14.26] as [number, number, number],
     cameraTarget: [-15, 3, 5] as [number, number, number],
@@ -137,6 +137,15 @@ function initAgent(def: AgentDef, idx: number): AgentRuntime {
 }
 
 // ── Store interface ───────────────────────────────────────────
+// Visual communication between agents
+export interface ActiveComm {
+  id: number
+  fromId: string
+  toId: string
+  message: string
+  startTime: number
+}
+
 interface SimStore {
   agents:        AgentRuntime[]
   log:           LogEntry[]
@@ -151,6 +160,9 @@ interface SimStore {
   // Beams: [fromId, toId, progress 0-1]
   activeBeams:   Array<{ id:number, from:string, to:string, progress:number }>
 
+  // Active communications (for 3D speech bubbles)
+  activeComms:   ActiveComm[]
+
   // View state for department navigation
   currentView:   ViewState
 
@@ -163,6 +175,10 @@ interface SimStore {
   setView:        (view: ViewState) => void
   getDepartmentAgents: (dept: ZoneName) => AgentRuntime[]
 
+  // Communication actions
+  startComm:      (fromId: string, toId: string, message: string) => void
+  endComm:        (commId: number) => void
+
   // Actions driven by the live backend (called from useBackendSocket)
   setConnected:      (v: boolean) => void
   setAgentState:     (agentId: string, state: AgentState, task: string) => void
@@ -173,6 +189,7 @@ interface SimStore {
 
 let logCounter = 0
 let beamCounter = 0
+let commCounter = 0
 
 export const useAgentStore = create<SimStore>((set, get) => ({
   agents:        AGENT_DEFS.map((d, i) => initAgent(d, i)),
@@ -184,6 +201,7 @@ export const useAgentStore = create<SimStore>((set, get) => ({
   nextMeeting:   rand(20, 35),
   simTime:       0,
   activeBeams:   [],
+  activeComms:   [],
   currentView:   'OVERVIEW',
   connected:     false,
 
@@ -244,6 +262,23 @@ export const useAgentStore = create<SimStore>((set, get) => ({
     const beam = { id: ++beamCounter, from: fromId, to: toId, progress: 0 }
     set(st => ({ activeBeams: [...st.activeBeams, beam] }))
     // advance beam progress over ~1 second in tick()
+  },
+
+  startComm(fromId: string, toId: string, message: string) {
+    const comm: ActiveComm = {
+      id: ++commCounter,
+      fromId,
+      toId,
+      message,
+      startTime: Date.now()
+    }
+    set(st => ({ activeComms: [...st.activeComms, comm] }))
+  },
+
+  endComm(commId: number) {
+    set(st => ({
+      activeComms: st.activeComms.filter(c => c.id !== commId)
+    }))
   },
 
   triggerMeeting() {
