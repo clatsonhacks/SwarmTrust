@@ -962,7 +962,7 @@ export default function DepartmentScene({ department }: { department: ZoneName }
 }
 
 // Preload models
-useGLTF.preload('/models/21948_autosave.gltf')
+useGLTF.preload('/models/21948_autosave.glb')
 useGLTF.preload('/models/box-02_robot.glb')
 useGLTF.preload('/models/turret_droid.glb')
 useGLTF.preload('/models/combat_steampunk_robot.glb')

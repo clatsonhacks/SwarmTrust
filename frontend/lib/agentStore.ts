@@ -41,9 +41,9 @@ export const DEPARTMENT_CONFIGS: Record<ZoneName, DepartmentConfig> = {
     glow: '#1aff88',
     agentIds: ['R1', 'R5'],
     agentScale: 1.0,
-    // Front-left corner
-    cameraPos: [-30, 15, -25] as [number, number, number],
-    cameraTarget: [-15, 3, -12] as [number, number, number],
+    // From Blender camera: CAM_Intake_Bay
+    cameraPos: [0, 6, 7.59] as [number, number, number],
+    cameraTarget: [0, 3, 0] as [number, number, number],
   },
   STORAGE: {
     name: 'STORAGE',
@@ -55,9 +55,9 @@ export const DEPARTMENT_CONFIGS: Record<ZoneName, DepartmentConfig> = {
     glow: '#5cc8ff',
     agentIds: ['R2'],
     agentScale: 1.0,
-    // Front-right corner
-    cameraPos: [30, 15, -25] as [number, number, number],
-    cameraTarget: [15, 3, -12] as [number, number, number],
+    // From Blender camera: CAM_Storage
+    cameraPos: [41.64, 8, 0] as [number, number, number],
+    cameraTarget: [30, 3, 0] as [number, number, number],
   },
   STAGING: {
     name: 'STAGING',
@@ -69,9 +69,9 @@ export const DEPARTMENT_CONFIGS: Record<ZoneName, DepartmentConfig> = {
     glow: '#ffcc44',
     agentIds: ['R3'],
     agentScale: 1.0,
-    // Back-left corner
-    cameraPos: [-30, 15, 25] as [number, number, number],
-    cameraTarget: [-15, 3, 12] as [number, number, number],
+    // From Blender camera: CAM_Sorting_Zone
+    cameraPos: [-14, 6, 45.34] as [number, number, number],
+    cameraTarget: [-10, 3, 35] as [number, number, number],
   },
   DISPATCH: {
     name: 'DISPATCH',
@@ -83,9 +83,9 @@ export const DEPARTMENT_CONFIGS: Record<ZoneName, DepartmentConfig> = {
     glow: '#ff5566',
     agentIds: ['R4'],
     agentScale: 0.5,
-    // Back-right corner
-    cameraPos: [30, 15, 25] as [number, number, number],
-    cameraTarget: [15, 3, 12] as [number, number, number],
+    // From Blender camera: CAM_Dispatch
+    cameraPos: [-21.17, 6, 14.26] as [number, number, number],
+    cameraTarget: [-15, 3, 5] as [number, number, number],
   },
 }
 
