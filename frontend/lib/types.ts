@@ -49,10 +49,12 @@ export interface DepartmentConfig {
   title:            string
   description:      string
   agentModel:       string     // GLB path for department-specific robot
-  environmentModel: string     // GLB path for department-specific props
+  environmentModel: string     // GLB path for department-specific environment
   color:            string     // accent color
   glow:             string     // glow color
   agentIds:         string[]   // Agent IDs assigned to this department
   agentScale?:      number     // render scale override (default 0.3)
   outdoor?:         boolean    // place agent outside the warehouse building
+  cameraPos?:       [number, number, number]   // camera position for this dept
+  cameraTarget?:    [number, number, number]   // camera look-at target
 }

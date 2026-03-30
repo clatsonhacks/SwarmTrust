@@ -25,51 +25,67 @@ export const ZONES: Record<ZoneName, ZoneDef> = {
 }
 
 // ── Department configurations (per-department models) ───────────────
+// Agent models as specified by user:
+// - box-02_robot → INTAKE
+// - turret_droid → STORAGE
+// - combat_steampunk_robot → STAGING
+// - nora (Object_204) → DISPATCH
 export const DEPARTMENT_CONFIGS: Record<ZoneName, DepartmentConfig> = {
   INTAKE: {
     name: 'INTAKE',
     title: 'Intake Bay',
     description: 'Receiving and initial processing of incoming goods',
     agentModel: '/models/box-02_robot.glb',
-    environmentModel: '/models/warehouse.glb',
+    environmentModel: '/models/21948_autosave.gltf',
     color: '#0d2a1a',
     glow: '#1aff88',
     agentIds: ['R1', 'R5'],
-    agentScale: 15,    // Larger model
+    agentScale: 1.0,
+    // Front-left corner
+    cameraPos: [-30, 15, -25] as [number, number, number],
+    cameraTarget: [-15, 3, -12] as [number, number, number],
   },
   STORAGE: {
     name: 'STORAGE',
     title: 'Storage Vault',
     description: 'Long-term inventory management and organization',
-    agentModel: '/models/monowheel_bot__vgdc.glb',
-    environmentModel: '/models/warehouse.glb',
+    agentModel: '/models/turret_droid.glb',
+    environmentModel: '/models/21948_autosave.gltf',
     color: '#0a1a2e',
     glow: '#5cc8ff',
     agentIds: ['R2'],
-    agentScale: 15,    // Larger model
+    agentScale: 1.0,
+    // Front-right corner
+    cameraPos: [30, 15, -25] as [number, number, number],
+    cameraTarget: [15, 3, -12] as [number, number, number],
   },
   STAGING: {
     name: 'STAGING',
     title: 'Staging Area',
     description: 'Order preparation and quality verification',
-    agentModel: '/models/turret_droid.glb',
-    environmentModel: '/models/warehouse.glb',
+    agentModel: '/models/combat_steampunk_robot.glb',
+    environmentModel: '/models/21948_autosave.gltf',
     color: '#2a2010',
     glow: '#ffcc44',
     agentIds: ['R3'],
-    agentScale: 0.55,    // Medium model
+    agentScale: 1.0,
+    // Back-left corner
+    cameraPos: [-30, 15, 25] as [number, number, number],
+    cameraTarget: [-15, 3, 12] as [number, number, number],
   },
   DISPATCH: {
     name: 'DISPATCH',
     title: 'Dispatch Hub',
     description: 'Final processing and shipment coordination',
     agentModel: '/models/nora.glb',
-    environmentModel: '/models/warehouse.glb',
+    environmentModel: '/models/21948_autosave.gltf',
     color: '#2a0e0e',
     glow: '#ff5566',
     agentIds: ['R4'],
-    outdoor: true,
-    agentScale: 0.10,    // Smaller model
+    agentScale: 0.5,
+    // Back-right corner
+    cameraPos: [30, 15, 25] as [number, number, number],
+    cameraTarget: [15, 3, 12] as [number, number, number],
   },
 }
 

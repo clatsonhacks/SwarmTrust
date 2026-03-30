@@ -2,13 +2,49 @@
 
 import { useRef, useEffect, useMemo, useState, Suspense } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { useGLTF, Environment, Html, useAnimations, OrbitControls } from '@react-three/drei'
+import { useGLTF, Environment, Html, useAnimations, OrbitControls, useProgress } from '@react-three/drei'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import * as THREE from 'three'
 import { SkeletonUtils } from 'three-stdlib'
 import { useAgentStore, DEPARTMENT_CONFIGS } from '@/lib/agentStore'
 import type { ZoneName, AgentState } from '@/lib/types'
 import TrustBeam from './TrustBeam'
+
+// ── Loading indicator ─────────────────────────────────────────────────
+function Loader() {
+  const { progress } = useProgress()
+  return (
+    <Html center>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 12,
+        color: '#fff',
+        fontFamily: 'monospace',
+      }}>
+        <div style={{
+          width: 200,
+          height: 6,
+          background: 'rgba(255,255,255,0.2)',
+          borderRadius: 3,
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            width: `${progress}%`,
+            height: '100%',
+            background: 'linear-gradient(90deg, #00ff88, #00ffff)',
+            borderRadius: 3,
+            transition: 'width 0.2s ease',
+          }} />
+        </div>
+        <div style={{ fontSize: 14, letterSpacing: '0.1em' }}>
+          LOADING {progress.toFixed(0)}%
+        </div>
+      </div>
+    </Html>
+  )
+}
 
 // ── Role-specific waypoints ───────────────────────────────────────────
 interface Waypoint {
@@ -17,10 +53,11 @@ interface Waypoint {
   execTime: number
 }
 
-function getWaypoints(type: string, dept: ZoneName, cx: number, cz: number, s: number): Waypoint[] {
+function getWaypoints(type: string, dept: ZoneName, cx: number, cz: number, s: number, groundY: number = 1): Waypoint[] {
   // Each department gets unique tasks even if agent type overlaps
+  // groundY ensures agents are above ground level
   const W = (ox: number, oz: number, task: string, execTime: number): Waypoint =>
-    ({ pos: [cx + s * ox, 0, cz + s * oz], task, execTime })
+    ({ pos: [cx + s * ox, groundY, cz + s * oz], task, execTime })
 
   const byDept: Partial<Record<ZoneName, Waypoint[]>> = {
     INTAKE: [
@@ -672,14 +709,19 @@ function DepartmentSceneContent({
     const size   = new THREE.Vector3()
     box.getCenter(center)
     box.getSize(size)
+
+    // Use camera target from config as agent center, or fall back to scene center
+    const deptCenter = config.cameraTarget || [center.x, 0, center.z]
+
     return {
-      cx:     center.x * 2,
-      cz:     center.z * 2,
-      spread: Math.min(size.x, size.z) * 2 * 0.18,
-      camR:   Math.max(size.x, size.z) * 2 * 0.55,
-      camH:   size.y * 2 * 0.65,
+      cx:      deptCenter[0],
+      cz:      deptCenter[2],
+      groundY: deptCenter[1] + 1,  // Agent ground level (slightly above target)
+      spread:  5,  // Fixed spread for agent waypoints
+      camR:    Math.max(size.x, size.z) * 0.55,
+      camH:    size.y * 0.65,
     }
-  }, [warehouseScene])
+  }, [warehouseScene, config.cameraTarget])
 
   const deptAgents = useMemo(() =>
     agents.filter(a => config.agentIds.includes(a.id)),
@@ -689,11 +731,14 @@ function DepartmentSceneContent({
   // Animated camera fly-in on mount
   const cameraAnimRef = useRef({ progress: 0, active: true })
 
+  // Get camera position from config or fallback to computed
+  const targetCamPos = config.cameraPos || [warehouseBounds.cx + 10, 8, warehouseBounds.cz + 10] as [number, number, number]
+  const targetCamTarget = config.cameraTarget || [warehouseBounds.cx, 0, warehouseBounds.cz] as [number, number, number]
+
   useEffect(() => {
-    const { cx, cz, camR, camH } = warehouseBounds
     // Start position: far outside, high up
-    camera.position.set(cx + camR * 2, camH * 1.5, cz + camR * 2)
-    camera.lookAt(cx, 0, cz)
+    camera.position.set(targetCamPos[0] + 30, targetCamPos[1] + 20, targetCamPos[2] + 30)
+    camera.lookAt(targetCamTarget[0], targetCamTarget[1], targetCamTarget[2])
     // Reset animation state
     cameraAnimRef.current = { progress: 0, active: true }
 
@@ -701,16 +746,15 @@ function DepartmentSceneContent({
       controlsRef.current?.saveState()
       resetRef.current = () => controlsRef.current?.reset()
     }, 2500) // Save state after fly-in completes
-  }, [camera, warehouseBounds, resetRef])
+  }, [camera, targetCamPos, targetCamTarget, resetRef])
 
-  // Animate camera flying into the warehouse
+  // Animate camera flying into the department area
   useFrame((_, delta) => {
     tick(delta)
 
     const anim = cameraAnimRef.current
     if (!anim.active) return
 
-    const { cx, cz, camR, camH } = warehouseBounds
     anim.progress += delta * 0.5 // ~2 second animation
 
     if (anim.progress >= 1) {
@@ -721,17 +765,17 @@ function DepartmentSceneContent({
     // Easing function (ease-out cubic)
     const t = 1 - Math.pow(1 - anim.progress, 3)
 
-    // Start: far outside & high | End: inside warehouse at eye level
-    const startPos = { x: cx + camR * 2, y: camH * 1.5, z: cz + camR * 2 }
-    const endPos = { x: cx + 1.5, y: 2.5, z: cz + 1.5 } // Inside, low angle
+    // Start: far outside & high | End: department camera position
+    const startPos = { x: targetCamPos[0] + 30, y: targetCamPos[1] + 20, z: targetCamPos[2] + 30 }
+    const endPos = { x: targetCamPos[0], y: targetCamPos[1], z: targetCamPos[2] }
 
     camera.position.x = startPos.x + (endPos.x - startPos.x) * t
     camera.position.y = startPos.y + (endPos.y - startPos.y) * t
     camera.position.z = startPos.z + (endPos.z - startPos.z) * t
 
-    // Update controls target to center
+    // Update controls target
     if (controlsRef.current) {
-      controlsRef.current.target.set(cx, 1, cz)
+      controlsRef.current.target.set(targetCamTarget[0], targetCamTarget[1], targetCamTarget[2])
       controlsRef.current.update()
     }
   })
@@ -739,12 +783,12 @@ function DepartmentSceneContent({
   // Beams between agents in this dept
   const getAgentPos = (agentId: string): [number, number, number] => {
     const idx = deptAgents.findIndex(a => a.id === agentId)
-    if (idx === -1) return [warehouseBounds.cx, 0, warehouseBounds.cz]
+    if (idx === -1) return [warehouseBounds.cx, warehouseBounds.groundY, warehouseBounds.cz]
     const wps = getWaypoints(
       deptAgents[idx].type, department,
-      warehouseBounds.cx, warehouseBounds.cz, warehouseBounds.spread
+      warehouseBounds.cx, warehouseBounds.cz, warehouseBounds.spread, warehouseBounds.groundY
     )
-    return wps[idx % wps.length]?.pos ?? [warehouseBounds.cx, 0, warehouseBounds.cz]
+    return wps[idx % wps.length]?.pos ?? [warehouseBounds.cx, warehouseBounds.groundY, warehouseBounds.cz]
   }
 
   const beamElements = beams
@@ -780,16 +824,58 @@ function DepartmentSceneContent({
       <OrbitControls
         ref={controlsRef}
         makeDefault
-        target={[warehouseBounds.cx, 0, warehouseBounds.cz]}
+        target={[targetCamTarget[0], targetCamTarget[1], targetCamTarget[2]]}
         enablePan enableZoom enableRotate
-        rotateSpeed={0.35} zoomSpeed={0.5} panSpeed={0.5}
-        minDistance={2}
-        maxDistance={warehouseBounds.camR * 1.8}
-        minPolarAngle={0.05}
-        maxPolarAngle={Math.PI * 0.80}
+        rotateSpeed={0.5} zoomSpeed={0.8} panSpeed={0.6}
+        minDistance={3}
+        maxDistance={80}
+        minPolarAngle={0.1}
+        maxPolarAngle={Math.PI * 0.85}
       />
 
       <WarehouseEnvironment department={department} />
+
+      {/* Zone Label - floating above workspace */}
+      <ZoneLabel
+        text={config.title.toUpperCase()}
+        position={[warehouseBounds.cx, 5, warehouseBounds.cz]}
+        color={config.glow}
+        subtitle={`${config.agentIds.length} AGENTS ACTIVE`}
+      />
+
+      {/* Floor Glow Zone - marks the work area */}
+      <FloorGlowZone
+        position={[warehouseBounds.cx, 0, warehouseBounds.cz]}
+        color={config.glow}
+        radius={warehouseBounds.spread * 1.2}
+      />
+
+      {/* Floating Particles - ambient effect */}
+      <FloatingParticles
+        color={config.glow}
+        count={40}
+        spread={warehouseBounds.spread * 1.5}
+      />
+
+      {/* Corner Markers */}
+      <CornerMarkers
+        cx={warehouseBounds.cx}
+        cz={warehouseBounds.cz}
+        spread={warehouseBounds.spread}
+        color={config.glow}
+      />
+
+      {/* Status Icons */}
+      <StatusIcon
+        position={[warehouseBounds.cx - 3, 3, warehouseBounds.cz - 3]}
+        icon="📦"
+        label="CARGO"
+      />
+      <StatusIcon
+        position={[warehouseBounds.cx + 3, 3, warehouseBounds.cz + 3]}
+        icon="🤖"
+        label="SWARM"
+      />
 
       {deptAgents.map((agent, idx) => {
         const agentScale = config.agentScale ?? 0.3
@@ -799,6 +885,7 @@ function DepartmentSceneContent({
           agent.type, department,
           warehouseBounds.cx, warehouseBounds.cz,
           warehouseBounds.spread * spreadMul,
+          warehouseBounds.groundY,
         )
         const speed = agent.type === 'SCOUT' ? 3.5 : agent.type === 'CARRIER' ? 4.0 : 2.8
         return (
@@ -841,27 +928,32 @@ export default function DepartmentScene({ department }: { department: ZoneName }
         </div>
       </div>
 
-      <button
-        onClick={() => resetRef.current?.()}
-        style={{
-          position: 'absolute', bottom: 20, right: 20, zIndex: 10,
-          background: 'rgba(0,0,0,0.6)', color: config.glow,
-          border: `1px solid ${config.glow}`, borderRadius: 6,
-          padding: '6px 14px', fontSize: 12, fontFamily: 'monospace',
-          cursor: 'pointer', letterSpacing: '0.05em',
-        }}
-      >
-        ⌖ Reset View
-      </button>
+      {/* Control buttons */}
+      <div style={{
+        position: 'absolute', bottom: 20, right: 20, zIndex: 10,
+        display: 'flex', gap: 10,
+      }}>
+        <button
+          onClick={() => resetRef.current?.()}
+          style={{
+            background: 'rgba(0,0,0,0.6)', color: config.glow,
+            border: `1px solid ${config.glow}`, borderRadius: 6,
+            padding: '6px 14px', fontSize: 12, fontFamily: 'monospace',
+            cursor: 'pointer', letterSpacing: '0.05em',
+          }}
+        >
+          ⌖ Reset View
+        </button>
+      </div>
 
       <Canvas
         shadows dpr={[1, 2]} gl={{ antialias: true }}
         camera={{ fov: 60, near: 0.1, far: 500, position: [0, 10, 15] }}
         style={{ cursor: 'grab' }}
-        onMouseDown={e => (e.currentTarget.style.cursor = 'grabbing')}
-        onMouseUp={e => (e.currentTarget.style.cursor = 'grab')}
+        onMouseDown={e => e.currentTarget.style.cursor = 'grabbing'}
+        onMouseUp={e => e.currentTarget.style.cursor = 'grab'}
       >
-        <Suspense fallback={null}>
+        <Suspense fallback={<Loader />}>
           <DepartmentSceneContent department={department} resetRef={resetRef} />
         </Suspense>
       </Canvas>
@@ -870,8 +962,8 @@ export default function DepartmentScene({ department }: { department: ZoneName }
 }
 
 // Preload models
-useGLTF.preload('/models/warehouse.glb')
+useGLTF.preload('/models/21948_autosave.gltf')
 useGLTF.preload('/models/box-02_robot.glb')
-useGLTF.preload('/models/monowheel_bot__vgdc.glb')
 useGLTF.preload('/models/turret_droid.glb')
+useGLTF.preload('/models/combat_steampunk_robot.glb')
 useGLTF.preload('/models/nora.glb')

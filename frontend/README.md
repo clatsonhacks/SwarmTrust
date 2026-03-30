@@ -5,7 +5,7 @@
 
 ---
 
-## Quick Start
+## Quick Start now
 
 ```bash
 cd swarmtrust-next
