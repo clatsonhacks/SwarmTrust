@@ -175,6 +175,7 @@ The response is a JSON array of sub-task objects. The robot iterates through thi
 
 Groq is used specifically because it has the fastest inference latency of any API-accessible LLM, which matters for simulation responsiveness. The llama-3.1-8b-instant model is sufficient for structured task decomposition — this does not require a large model.
 
+
 ### 6.5 Three.js Simulation Scene
 
 The 3D scene is a self-contained module in the frontend. It receives position and state update messages from the WebSocket client and updates the rendered scene accordingly. It does not make any direct API calls — all data flows through the WebSocket connection from the orchestrator.
