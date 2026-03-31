@@ -841,14 +841,6 @@ function DepartmentSceneContent({
 
       <WarehouseEnvironment department={department} />
 
-      {/* Zone Label - floating above workspace */}
-      <ZoneLabel
-        text={config.title.toUpperCase()}
-        position={[warehouseBounds.cx, 5, warehouseBounds.cz]}
-        color={config.glow}
-        subtitle={`${config.agentIds.length} AGENTS ACTIVE`}
-      />
-
       {/* Floor Glow Zone - marks the work area */}
       <FloorGlowZone
         position={[warehouseBounds.cx, 0, warehouseBounds.cz]}
@@ -950,11 +942,32 @@ function DepartmentSceneContent({
   )
 }
 
+// Robot IDs that belong to each department (backend ID → dept)
+const DEPT_ROBOTS: Record<string, string[]> = {
+  INTAKE:   ['scout-1',   'lifter-5'],
+  STORAGE:  ['lifter-2'],
+  STAGING:  ['scout-3'],
+  DISPATCH: ['carrier-4'],
+}
+
+const LOG_BORDER: Record<string, string> = {
+  payment: '#60a5fa',
+  chain:   '#cc44ff',
+  meeting: '#c5ff2b',
+  info:    'rgba(255,255,255,0.12)',
+}
+
 // ── Main export ──────────────────────────────────────────────────────
 export default function DepartmentScene({ department }: { department: ZoneName }) {
   const setView  = useAgentStore(s => s.setView)
+  const rawLog   = useAgentStore(s => s.log)
   const config   = DEPARTMENT_CONFIGS[department]
   const resetRef = useRef<(() => void) | null>(null)
+
+  const robots = DEPT_ROBOTS[department] ?? []
+  const zoneLog = rawLog.filter(e =>
+    robots.some(r => e.message.includes(r))
+  ).slice(0, 15)
 
   return (
     <div className="dept-scene-wrap">
@@ -967,6 +980,53 @@ export default function DepartmentScene({ department }: { department: ZoneName }
         </h2>
         <div className="dept-scene-badge" style={{ background: config.glow }}>
           {config.agentIds.length} Agents
+        </div>
+      </div>
+
+      {/* Zone activity log overlay — bottom-right */}
+      <div style={{
+        position: 'absolute', bottom: 70, right: 20, zIndex: 10,
+        width: '340px', maxHeight: '38vh',
+        background: 'rgba(7,8,16,0.88)',
+        backdropFilter: 'blur(12px)',
+        border: '0.5px solid rgba(255,255,255,0.1)',
+        borderRadius: '6px',
+        overflow: 'hidden',
+        display: 'flex', flexDirection: 'column',
+      }}>
+        <div style={{ padding: '12px 16px 8px', borderBottom: '0.5px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', fontWeight: 700 }}>
+            {department} Log
+          </span>
+          {zoneLog.length > 0 && (
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: config.glow, fontWeight: 700, float: 'right' }}>
+              {zoneLog.length}
+            </span>
+          )}
+        </div>
+        <div style={{ overflowY: 'auto', flex: 1 }}>
+          {zoneLog.length === 0 ? (
+            <div style={{ padding: '14px 16px', fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'rgba(255,255,255,0.2)' }}>
+              Waiting for activity…
+            </div>
+          ) : zoneLog.map(entry => (
+            <div key={entry.id} style={{
+              padding: '7px 0 7px 10px',
+              margin: '0 16px',
+              borderLeft: `2px solid ${LOG_BORDER[entry.type] ?? LOG_BORDER.info}`,
+              borderBottom: '0.5px solid rgba(255,255,255,0.04)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '8px', color: 'rgba(255,255,255,0.25)', flexShrink: 0 }}>
+                  {entry.timestamp}
+                </span>
+                <div
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'rgba(255,255,255,0.65)', lineHeight: '1.5', letterSpacing: '0.02em' }}
+                  dangerouslySetInnerHTML={{ __html: entry.message }}
+                />
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
