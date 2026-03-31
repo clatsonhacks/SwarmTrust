@@ -16,802 +16,267 @@ export interface AgentInfo {
 }
 
 interface AgentInventoryProps {
+  isOpen: boolean
+  onClose: () => void
   agents: AgentInfo[]
   onSpawnAgent?: (capabilities: string[]) => void
 }
 
 const CAPABILITY_COLORS: Record<string, string> = {
-  NAVIGATE: '#60a5fa',
-  SCAN: '#a78bfa',
-  LIFT: '#f59e0b',
-  CARRY: '#10b981',
+  NAVIGATE: '#5cc8ff',
+  SCAN:     '#cc44ff',
+  LIFT:     '#ff9b2b',
+  CARRY:    '#1aff88',
 }
 
-const CAPABILITY_ICONS: Record<string, string> = {
-  NAVIGATE: '🧭',
-  SCAN: '📡',
-  LIFT: '🏋️',
-  CARRY: '📦',
+const STATE_META: Record<string, { color: string; bg: string }> = {
+  IDLE:            { color: 'rgba(255,255,255,0.45)', bg: 'rgba(255,255,255,0.06)' },
+  MOVING:          { color: '#5cc8ff',  bg: 'rgba(92,200,255,0.12)' },
+  EXECUTING:       { color: '#ff9b2b',  bg: 'rgba(255,155,43,0.12)' },
+  WAITING:         { color: '#cc44ff',  bg: 'rgba(204,68,255,0.12)' },
+  WAITING_PAYMENT: { color: '#ff9b2b',  bg: 'rgba(255,155,43,0.12)' },
 }
 
-const STATE_COLORS = {
-  IDLE: '#64748b',
-  MOVING: '#60a5fa',
-  EXECUTING: '#fbbf24',
-  WAITING: '#a78bfa',
-  WAITING_PAYMENT: '#f59e0b',
-}
+const ALL_CAPS = ['NAVIGATE', 'SCAN', 'LIFT', 'CARRY']
 
-export default function AgentInventory({ agents, onSpawnAgent }: AgentInventoryProps) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
-  const [showSpawnModal, setShowSpawnModal] = useState(false)
-  const [selectedCapabilities, setSelectedCapabilities] = useState<string[]>(['NAVIGATE'])
+export default function AgentInventory({ isOpen, onClose, agents, onSpawnAgent }: AgentInventoryProps) {
+  const [selected,      setSelected]      = useState<string | null>(null)
+  const [showSpawn,     setShowSpawn]     = useState(false)
+  const [selectedCaps,  setSelectedCaps]  = useState<string[]>(['NAVIGATE'])
 
-  const agent = selectedAgent ? agents.find((a) => a.robotId === selectedAgent) : null
+  const agent = selected ? agents.find(a => a.robotId === selected) : null
 
-  const toggleCapability = (cap: string) => {
-    if (selectedCapabilities.includes(cap)) {
-      setSelectedCapabilities(selectedCapabilities.filter((c) => c !== cap))
-    } else {
-      setSelectedCapabilities([...selectedCapabilities, cap])
-    }
-  }
+  const toggleCap = (cap: string) =>
+    setSelectedCaps(prev => prev.includes(cap) ? prev.filter(c => c !== cap) : [...prev, cap])
 
   const handleSpawn = () => {
-    if (selectedCapabilities.length > 0 && onSpawnAgent) {
-      onSpawnAgent(selectedCapabilities)
-      setShowSpawnModal(false)
-      setSelectedCapabilities(['NAVIGATE'])
+    if (selectedCaps.length > 0 && onSpawnAgent) {
+      onSpawnAgent(selectedCaps)
+      setShowSpawn(false)
+      setSelectedCaps(['NAVIGATE'])
     }
   }
+
+  if (!isOpen) return null
 
   return (
     <>
-      {/* Inventory Toggle Button */}
-      <button className="inventory-toggle-btn" onClick={() => setIsOpen(!isOpen)}>
-        <span className="inventory-icon">🤖</span>
-        <span className="inventory-count">{agents.length}</span>
-      </button>
+      <div
+        onClick={onClose}
+        style={{
+          position: 'fixed', inset: 0,
+          background: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(6px)',
+          zIndex: 500,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            width: '95%', maxWidth: '1100px', maxHeight: '88vh',
+            background: 'var(--bg)',
+            border: '0.5px solid rgba(255,255,255,0.12)',
+            borderRadius: '6px',
+            display: 'flex', flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Header */}
+          <div style={{
+            padding: '16px 24px',
+            borderBottom: '0.5px solid rgba(255,255,255,0.08)',
+            display: 'flex', alignItems: 'center', gap: '16px',
+            flexShrink: 0,
+          }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.8)', fontWeight: 700 }}>
+              Agent Inventory
+            </span>
+            <span style={{ flex: 1, height: '0.5px', background: 'rgba(255,255,255,0.06)' }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--accent)', fontWeight: 700 }}>
+              {agents.length} agents
+            </span>
+            <button
+              onClick={() => setShowSpawn(true)}
+              style={{
+                fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '0.16em',
+                textTransform: 'uppercase', padding: '6px 14px',
+                background: 'rgba(197,255,43,0.08)',
+                border: '0.5px solid rgba(197,255,43,0.3)',
+                color: 'var(--accent)', borderRadius: '3px', cursor: 'pointer',
+              }}
+            >
+              + Spawn
+            </button>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: '16px', padding: '0 0 0 8px', lineHeight: 1 }}>✕</button>
+          </div>
 
-      {/* Inventory Panel */}
-      {isOpen && (
-        <div className="inventory-overlay" onClick={() => setIsOpen(false)}>
-          <div className="inventory-panel" onClick={(e) => e.stopPropagation()}>
-            <div className="inventory-header">
-              <h2>AGENT INVENTORY</h2>
-              <div className="header-actions">
-                <button className="spawn-btn" onClick={() => setShowSpawnModal(true)}>
-                  + SPAWN AGENT
-                </button>
-                <button className="close-btn" onClick={() => setIsOpen(false)}>
-                  ✕
-                </button>
-              </div>
-            </div>
+          {/* Content */}
+          <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
-            <div className="inventory-content">
-              {/* Agent Grid */}
-              <div className="agent-grid">
-                {agents.map((ag) => (
+            {/* Agent grid */}
+            <div style={{
+              flex: 1, padding: '20px', overflowY: 'auto',
+              display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+              gap: '10px', alignContent: 'start',
+            }}>
+              {agents.map(ag => {
+                const meta = STATE_META[ag.behaviorState] ?? STATE_META.IDLE
+                const isSel = selected === ag.robotId
+                return (
                   <div
                     key={ag.robotId}
-                    className={`agent-card ${selectedAgent === ag.robotId ? 'selected' : ''}`}
-                    onClick={() => setSelectedAgent(ag.robotId)}
+                    onClick={() => setSelected(isSel ? null : ag.robotId)}
+                    style={{
+                      padding: '14px',
+                      background: isSel ? 'rgba(197,255,43,0.05)' : 'rgba(255,255,255,0.02)',
+                      border: `0.5px solid ${isSel ? 'rgba(197,255,43,0.3)' : 'rgba(255,255,255,0.08)'}`,
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      transition: 'border-color 0.2s, background 0.2s',
+                    }}
                   >
-                    <div className="agent-card-header">
-                      <span className="agent-id">{ag.robotId}</span>
-                      <span
-                        className="agent-state"
-                        style={{ background: STATE_COLORS[ag.behaviorState] }}
-                      >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: '#ffffff', fontWeight: 700, letterSpacing: '0.06em' }}>
+                        {ag.robotId}
+                      </span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '0.12em', padding: '3px 8px', background: meta.bg, color: meta.color, borderRadius: '2px', fontWeight: 700 }}>
                         {ag.behaviorState}
                       </span>
                     </div>
 
-                    <div className="agent-capabilities">
-                      {(ag.capabilities || []).map((cap) => (
-                        <span
-                          key={cap}
-                          className="capability-badge"
-                          style={{ borderColor: CAPABILITY_COLORS[cap] }}
-                        >
-                          {CAPABILITY_ICONS[cap]} {cap}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '10px' }}>
+                      {(ag.capabilities || []).map(cap => (
+                        <span key={cap} style={{
+                          fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '0.08em',
+                          padding: '3px 8px',
+                          border: `0.5px solid ${CAPABILITY_COLORS[cap] ?? 'rgba(255,255,255,0.2)'}`,
+                          color: CAPABILITY_COLORS[cap] ?? 'rgba(255,255,255,0.5)',
+                          borderRadius: '2px',
+                        }}>
+                          {cap}
                         </span>
                       ))}
                     </div>
 
-                    <div className="agent-stats">
-                      <div className="stat">
-                        <span className="stat-label">Reputation</span>
-                        <span className="stat-value">{ag.reputationScore}</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '10px', borderTop: '0.5px solid rgba(255,255,255,0.06)' }}>
+                      <div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '3px' }}>REP</div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '15px', color: '#ffffff', fontWeight: 700 }}>{ag.reputationScore}</div>
                       </div>
-                      <div className="stat">
-                        <span className="stat-label">Balance</span>
-                        <span className="stat-value">{parseFloat(ag.usdcBalance).toFixed(2)} USDC</span>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '3px' }}>USDC</div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '15px', color: '#1aff88', fontWeight: 700 }}>{parseFloat(ag.usdcBalance).toFixed(2)}</div>
                       </div>
-                    </div>
-
-                    {ag.zone && (
-                      <div className="agent-zone">
-                        📍 {ag.zone}
-                      </div>
-                    )}
-                  </div>
-                ))}
-
-                {agents.length === 0 && (
-                  <div className="empty-state">
-                    <div className="empty-icon">🤖</div>
-                    <div className="empty-text">No agents in inventory</div>
-                    <button className="empty-spawn-btn" onClick={() => setShowSpawnModal(true)}>
-                      Spawn Your First Agent
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Agent Details Panel */}
-              {agent && (
-                <div className="agent-details">
-                  <h3>AGENT DETAILS</h3>
-
-                  <div className="detail-section">
-                    <div className="detail-row">
-                      <span className="detail-label">Agent ID</span>
-                      <span className="detail-value">{agent.robotId}</span>
-                    </div>
-                    <div className="detail-row">
-                      <span className="detail-label">Status</span>
-                      <span
-                        className="detail-badge"
-                        style={{ background: STATE_COLORS[agent.behaviorState] }}
-                      >
-                        {agent.behaviorState}
-                      </span>
-                    </div>
-                    <div className="detail-row">
-                      <span className="detail-label">Current Task</span>
-                      <span className="detail-value">
-                        {agent.currentTaskId || 'None'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="detail-section">
-                    <div className="detail-row">
-                      <span className="detail-label">Position</span>
-                      <span className="detail-value mono">
-                        X: {agent.position.x.toFixed(1)} Y: {agent.position.y.toFixed(1)} Z: {agent.position.z.toFixed(1)}
-                      </span>
-                    </div>
-                    {agent.zone && (
-                      <div className="detail-row">
-                        <span className="detail-label">Current Zone</span>
-                        <span className="detail-value">{agent.zone}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="detail-section">
-                    <div className="detail-row">
-                      <span className="detail-label">Reputation</span>
-                      <span className="detail-value">
-                        {agent.reputationScore} / 100
-                      </span>
-                    </div>
-                    <div className="reputation-bar">
-                      <div
-                        className="reputation-fill"
-                        style={{ width: `${agent.reputationScore}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="detail-section">
-                    <div className="detail-row">
-                      <span className="detail-label">USDC Balance</span>
-                      <span className="detail-value usdc">
-                        {parseFloat(agent.usdcBalance).toFixed(4)} USDC
-                      </span>
-                    </div>
-                    {agent.walletAddress && (
-                      <div className="detail-row">
-                        <span className="detail-label">Wallet</span>
-                        <span className="detail-value mono small">
-                          {agent.walletAddress.slice(0, 6)}...{agent.walletAddress.slice(-4)}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="detail-section">
-                    <span className="detail-label">Capabilities</span>
-                    <div className="capabilities-list">
-                      {(agent.capabilities || []).map((cap) => (
-                        <div
-                          key={cap}
-                          className="capability-item"
-                          style={{ borderColor: CAPABILITY_COLORS[cap] }}
-                        >
-                          <span className="cap-icon">{CAPABILITY_ICONS[cap]}</span>
-                          <span className="cap-name">{cap}</span>
+                      {ag.zone && (
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '3px' }}>ZONE</div>
+                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'rgba(255,255,255,0.75)' }}>{ag.zone}</div>
                         </div>
-                      ))}
+                      )}
                     </div>
                   </div>
+                )
+              })}
+              {agents.length === 0 && (
+                <div style={{ gridColumn: '1/-1', textAlign: 'center', paddingTop: '60px', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'rgba(255,255,255,0.2)' }}>
+                  No agents in inventory
                 </div>
               )}
             </div>
+
+            {/* Detail panel */}
+            {agent && (
+              <div style={{ width: '300px', flexShrink: 0, borderLeft: '0.5px solid rgba(255,255,255,0.06)', padding: '20px', overflowY: 'auto' }}>
+                <p style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.8)', fontWeight: 700, marginBottom: '20px' }}>
+                  Agent Details
+                </p>
+
+                {[
+                  { label: 'Agent ID',    value: agent.robotId },
+                  { label: 'Task',        value: agent.currentTaskId ?? 'None' },
+                  { label: 'Zone',        value: agent.zone ?? '—' },
+                  { label: 'Position',    value: `${agent.position.x.toFixed(1)}, ${agent.position.y.toFixed(1)}, ${agent.position.z.toFixed(1)}` },
+                  { label: 'Reputation',  value: `${agent.reputationScore} / 100` },
+                  { label: 'USDC',        value: `${parseFloat(agent.usdcBalance).toFixed(4)}` },
+                  { label: 'Wallet',      value: agent.walletAddress ? `${agent.walletAddress.slice(0,6)}…${agent.walletAddress.slice(-4)}` : '—' },
+                ].map(({ label, value }) => (
+                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '8px 0', borderBottom: '0.5px solid rgba(255,255,255,0.05)' }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>{label}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: '#ffffff', textAlign: 'right', maxWidth: '160px', wordBreak: 'break-all', fontWeight: 600 }}>{value}</span>
+                  </div>
+                ))}
+
+                {/* Rep bar */}
+                <div style={{ marginTop: '16px', height: '2px', background: 'rgba(255,255,255,0.06)', borderRadius: '1px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${agent.reputationScore}%`, background: '#1aff88', transition: 'width 0.4s ease' }} />
+                </div>
+
+                {/* Capabilities */}
+                <div style={{ marginTop: '20px' }}>
+                  <p style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)', fontWeight: 700, marginBottom: '12px' }}>Capabilities</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {(agent.capabilities || []).map(cap => (
+                      <div key={cap} style={{
+                        display: 'flex', alignItems: 'center', gap: '10px',
+                        padding: '10px 12px',
+                        background: 'rgba(255,255,255,0.02)',
+                        border: `0.5px solid ${CAPABILITY_COLORS[cap] ?? 'rgba(255,255,255,0.1)'}`,
+                        borderRadius: '3px',
+                      }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: CAPABILITY_COLORS[cap] ?? '#ffffff', fontWeight: 700 }}>{cap}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Spawn Agent Modal */}
-      {showSpawnModal && (
-        <div className="spawn-modal-overlay" onClick={() => setShowSpawnModal(false)}>
-          <div className="spawn-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>SPAWN NEW AGENT</h3>
-            <p className="spawn-description">
-              Select capabilities for your new agent. Each agent requires at least one capability.
-            </p>
+      {/* Spawn modal */}
+      {showSpawn && (
+        <div onClick={() => setShowSpawn(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)', zIndex: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: '420px', background: 'var(--bg)', border: '0.5px solid rgba(255,255,255,0.12)', borderRadius: '6px', padding: '28px' }}>
+            <p style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)', marginBottom: '6px' }}>Spawn Agent</p>
+            <p style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', color: 'rgba(255,255,255,0.45)', marginBottom: '24px' }}>Select capabilities for the new agent</p>
 
-            <div className="capability-selector">
-              {Object.keys(CAPABILITY_COLORS).map((cap) => (
-                <button
-                  key={cap}
-                  className={`capability-option ${selectedCapabilities.includes(cap) ? 'selected' : ''}`}
-                  onClick={() => toggleCapability(cap)}
-                  style={{
-                    borderColor: selectedCapabilities.includes(cap)
-                      ? CAPABILITY_COLORS[cap]
-                      : 'rgba(255, 255, 255, 0.2)',
-                  }}
-                >
-                  <span className="cap-icon">{CAPABILITY_ICONS[cap]}</span>
-                  <span className="cap-name">{cap}</span>
-                </button>
-              ))}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '24px' }}>
+              {ALL_CAPS.map(cap => {
+                const active = selectedCaps.includes(cap)
+                return (
+                  <button
+                    key={cap}
+                    onClick={() => toggleCap(cap)}
+                    style={{
+                      padding: '14px',
+                      background: active ? `${CAPABILITY_COLORS[cap]}14` : 'rgba(255,255,255,0.02)',
+                      border: `0.5px solid ${active ? CAPABILITY_COLORS[cap] : 'rgba(255,255,255,0.1)'}`,
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '0.12em',
+                      color: active ? CAPABILITY_COLORS[cap] : 'rgba(255,255,255,0.4)',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    {cap}
+                  </button>
+                )
+              })}
             </div>
 
-            <div className="spawn-actions">
-              <button className="cancel-btn" onClick={() => setShowSpawnModal(false)}>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => setShowSpawn(false)} style={{ flex: 1, padding: '10px', background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.1)', borderRadius: '4px', color: 'rgba(255,255,255,0.5)', fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '0.14em', textTransform: 'uppercase', cursor: 'pointer' }}>
                 Cancel
               </button>
-              <button
-                className="confirm-spawn-btn"
-                onClick={handleSpawn}
-                disabled={selectedCapabilities.length === 0}
-              >
-                Spawn Agent
+              <button onClick={handleSpawn} disabled={selectedCaps.length === 0} style={{ flex: 1, padding: '10px', background: 'var(--accent)', border: 'none', borderRadius: '4px', color: '#070810', fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700, cursor: 'pointer', opacity: selectedCaps.length === 0 ? 0.4 : 1 }}>
+                Spawn
               </button>
             </div>
           </div>
         </div>
       )}
-
-      <style jsx>{`
-        .inventory-toggle-btn {
-          position: fixed;
-          top: 100px;
-          right: 20px;
-          width: 60px;
-          height: 60px;
-          border-radius: 12px;
-          background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-          border: 2px solid rgba(139, 92, 246, 0.4);
-          cursor: pointer;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 4px;
-          z-index: 100;
-          transition: all 0.3s ease;
-        }
-
-        .inventory-toggle-btn:hover {
-          border-color: #a78bfa;
-          transform: translateY(-2px);
-          box-shadow: 0 8px 24px rgba(139, 92, 246, 0.3);
-        }
-
-        .inventory-icon {
-          font-size: 24px;
-        }
-
-        .inventory-count {
-          font-size: 11px;
-          font-weight: 700;
-          color: #a78bfa;
-          font-family: var(--font-mono);
-        }
-
-        .inventory-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(0, 0, 0, 0.85);
-          backdrop-filter: blur(8px);
-          z-index: 150;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          animation: fadeIn 0.2s ease;
-        }
-
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-          }
-          to {
-            opacity: 1;
-          }
-        }
-
-        .inventory-panel {
-          width: 95%;
-          max-width: 1200px;
-          max-height: 90vh;
-          background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-          border: 2px solid rgba(139, 92, 246, 0.4);
-          border-radius: 16px;
-          overflow: hidden;
-          display: flex;
-          flex-direction: column;
-          animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        @keyframes slideUp {
-          from {
-            opacity: 0;
-            transform: translateY(40px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .inventory-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 20px 24px;
-          border-bottom: 2px solid rgba(139, 92, 246, 0.2);
-          background: rgba(139, 92, 246, 0.05);
-        }
-
-        .inventory-header h2 {
-          font-family: 'Rajdhani', sans-serif;
-          font-size: 24px;
-          font-weight: 700;
-          color: #a78bfa;
-          letter-spacing: 2px;
-          margin: 0;
-        }
-
-        .header-actions {
-          display: flex;
-          gap: 12px;
-          align-items: center;
-        }
-
-        .spawn-btn {
-          padding: 10px 20px;
-          background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
-          border: none;
-          border-radius: 8px;
-          color: white;
-          font-size: 12px;
-          font-weight: 700;
-          font-family: 'Rajdhani', sans-serif;
-          letter-spacing: 1px;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-
-        .spawn-btn:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
-        }
-
-        .close-btn {
-          width: 32px;
-          height: 32px;
-          border-radius: 8px;
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          color: rgba(255, 255, 255, 0.6);
-          font-size: 20px;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-
-        .close-btn:hover {
-          background: rgba(255, 85, 85, 0.2);
-          border-color: #ff5555;
-          color: #ff5555;
-        }
-
-        .inventory-content {
-          display: flex;
-          flex: 1;
-          overflow: hidden;
-        }
-
-        .agent-grid {
-          flex: 1;
-          padding: 24px;
-          overflow-y: auto;
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-          gap: 16px;
-          align-content: start;
-        }
-
-        .agent-card {
-          padding: 16px;
-          background: rgba(255, 255, 255, 0.03);
-          border: 2px solid rgba(255, 255, 255, 0.1);
-          border-radius: 12px;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-
-        .agent-card:hover {
-          background: rgba(255, 255, 255, 0.06);
-          border-color: rgba(139, 92, 246, 0.4);
-          transform: translateY(-2px);
-        }
-
-        .agent-card.selected {
-          border-color: #a78bfa;
-          background: rgba(139, 92, 246, 0.1);
-        }
-
-        .agent-card-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-bottom: 12px;
-        }
-
-        .agent-id {
-          font-size: 14px;
-          font-weight: 700;
-          color: rgba(255, 255, 255, 0.9);
-          font-family: var(--font-mono);
-        }
-
-        .agent-state {
-          padding: 4px 8px;
-          border-radius: 4px;
-          font-size: 9px;
-          font-weight: 700;
-          color: white;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
-
-        .agent-capabilities {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 6px;
-          margin-bottom: 12px;
-        }
-
-        .capability-badge {
-          padding: 4px 8px;
-          border: 1px solid;
-          border-radius: 4px;
-          font-size: 10px;
-          font-weight: 600;
-          color: rgba(255, 255, 255, 0.8);
-          background: rgba(255, 255, 255, 0.03);
-          display: flex;
-          align-items: center;
-          gap: 4px;
-        }
-
-        .agent-stats {
-          display: flex;
-          gap: 16px;
-          padding-top: 12px;
-          border-top: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .stat {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-        }
-
-        .stat-label {
-          font-size: 10px;
-          color: rgba(255, 255, 255, 0.5);
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
-
-        .stat-value {
-          font-size: 13px;
-          font-weight: 700;
-          color: rgba(255, 255, 255, 0.9);
-          font-family: var(--font-mono);
-        }
-
-        .agent-zone {
-          margin-top: 8px;
-          font-size: 11px;
-          color: rgba(255, 255, 255, 0.6);
-          font-family: var(--font-mono);
-        }
-
-        .agent-details {
-          width: 350px;
-          padding: 24px;
-          background: rgba(0, 0, 0, 0.3);
-          border-left: 2px solid rgba(255, 255, 255, 0.1);
-          overflow-y: auto;
-        }
-
-        .agent-details h3 {
-          font-family: 'Rajdhani', sans-serif;
-          font-size: 18px;
-          font-weight: 700;
-          color: rgba(255, 255, 255, 0.9);
-          margin: 0 0 20px 0;
-          text-transform: uppercase;
-          letter-spacing: 1.5px;
-        }
-
-        .detail-section {
-          margin-bottom: 24px;
-          padding-bottom: 20px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .detail-section:last-child {
-          border-bottom: none;
-        }
-
-        .detail-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 12px;
-        }
-
-        .detail-label {
-          font-size: 11px;
-          color: rgba(255, 255, 255, 0.5);
-          text-transform: uppercase;
-          letter-spacing: 0.8px;
-          font-weight: 600;
-        }
-
-        .detail-value {
-          font-size: 13px;
-          color: rgba(255, 255, 255, 0.9);
-          font-weight: 600;
-        }
-
-        .detail-value.mono {
-          font-family: var(--font-mono);
-          font-size: 11px;
-        }
-
-        .detail-value.small {
-          font-size: 11px;
-        }
-
-        .detail-value.usdc {
-          color: #10b981;
-        }
-
-        .detail-badge {
-          padding: 4px 10px;
-          border-radius: 4px;
-          font-size: 10px;
-          font-weight: 700;
-          color: white;
-          text-transform: uppercase;
-        }
-
-        .reputation-bar {
-          width: 100%;
-          height: 8px;
-          background: rgba(255, 255, 255, 0.1);
-          border-radius: 4px;
-          overflow: hidden;
-          margin-top: 8px;
-        }
-
-        .reputation-fill {
-          height: 100%;
-          background: linear-gradient(90deg, #10b981 0%, #34d399 100%);
-          transition: width 0.3s ease;
-        }
-
-        .capabilities-list {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-          margin-top: 12px;
-        }
-
-        .capability-item {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 10px 12px;
-          background: rgba(255, 255, 255, 0.03);
-          border: 1px solid;
-          border-radius: 6px;
-        }
-
-        .cap-icon {
-          font-size: 18px;
-        }
-
-        .cap-name {
-          font-size: 12px;
-          font-weight: 600;
-          color: rgba(255, 255, 255, 0.8);
-        }
-
-        .empty-state {
-          grid-column: 1 / -1;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          padding: 60px 20px;
-          gap: 16px;
-        }
-
-        .empty-icon {
-          font-size: 64px;
-          opacity: 0.3;
-        }
-
-        .empty-text {
-          font-size: 16px;
-          color: rgba(255, 255, 255, 0.4);
-        }
-
-        .empty-spawn-btn {
-          padding: 12px 24px;
-          background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
-          border: none;
-          border-radius: 8px;
-          color: white;
-          font-size: 14px;
-          font-weight: 700;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-
-        .empty-spawn-btn:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 8px 24px rgba(139, 92, 246, 0.4);
-        }
-
-        .spawn-modal-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(0, 0, 0, 0.9);
-          backdrop-filter: blur(8px);
-          z-index: 200;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .spawn-modal {
-          width: 90%;
-          max-width: 500px;
-          padding: 32px;
-          background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-          border: 2px solid rgba(139, 92, 246, 0.4);
-          border-radius: 16px;
-        }
-
-        .spawn-modal h3 {
-          font-family: 'Rajdhani', sans-serif;
-          font-size: 22px;
-          font-weight: 700;
-          color: #a78bfa;
-          margin: 0 0 12px 0;
-          letter-spacing: 1.5px;
-        }
-
-        .spawn-description {
-          font-size: 14px;
-          color: rgba(255, 255, 255, 0.6);
-          margin: 0 0 24px 0;
-        }
-
-        .capability-selector {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 12px;
-          margin-bottom: 24px;
-        }
-
-        .capability-option {
-          padding: 16px;
-          background: rgba(255, 255, 255, 0.03);
-          border: 2px solid;
-          border-radius: 10px;
-          cursor: pointer;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 8px;
-          transition: all 0.2s ease;
-        }
-
-        .capability-option:hover {
-          background: rgba(255, 255, 255, 0.06);
-        }
-
-        .capability-option.selected {
-          background: rgba(139, 92, 246, 0.15);
-        }
-
-        .spawn-actions {
-          display: flex;
-          gap: 12px;
-        }
-
-        .cancel-btn {
-          flex: 1;
-          padding: 12px;
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          border-radius: 8px;
-          color: rgba(255, 255, 255, 0.7);
-          font-size: 14px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-
-        .cancel-btn:hover {
-          background: rgba(255, 255, 255, 0.08);
-        }
-
-        .confirm-spawn-btn {
-          flex: 1;
-          padding: 12px;
-          background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
-          border: none;
-          border-radius: 8px;
-          color: white;
-          font-size: 14px;
-          font-weight: 700;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-
-        .confirm-spawn-btn:hover:not(:disabled) {
-          transform: translateY(-2px);
-          box-shadow: 0 8px 24px rgba(139, 92, 246, 0.4);
-        }
-
-        .confirm-spawn-btn:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-      `}</style>
     </>
   )
 }

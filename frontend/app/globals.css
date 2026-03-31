@@ -43,6 +43,13 @@
 }
 
 /* ═══════════════════════════════════════════════
+   AGENT LOG HTML CLASS COLOURS
+   Used by dangerouslySetInnerHTML log entries
+═══════════════════════════════════════════════ */
+.acc { color: var(--accent); }
+.pay { color: #60a5fa; }
+
+/* ═══════════════════════════════════════════════
    RESET & BASE
 ═══════════════════════════════════════════════ */
 *, *::before, *::after {
@@ -816,7 +823,9 @@ body.cursor-hover .c-ring {
 ═══════════════════════════════════════════════ */
 .dept-overview {
   width: 100%;
-  min-height: 100vh;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
   background: var(--bg);
   display: flex;
   align-items: stretch;
@@ -829,6 +838,8 @@ body.cursor-hover .c-ring {
   max-width: 1400px;
   margin: 0 auto;
   gap: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .dept-left {
@@ -1115,14 +1126,14 @@ body.cursor-hover .c-ring {
 
 .dept-scene-header {
   position: absolute;
-  top: 0;
+  top: 48px;
   left: 0;
   right: 0;
   z-index: 100;
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 20px 24px;
+  padding: 16px 24px;
   background: linear-gradient(to bottom, rgba(7, 8, 16, 0.9), transparent);
 }
 
@@ -1130,17 +1141,18 @@ body.cursor-hover .c-ring {
   font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 0.08em;
-  color: var(--t-mid);
+  color: rgba(255, 255, 255, 0.6);
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--b-lo);
-  padding: 10px 16px;
+  border: 0.5px solid rgba(255, 255, 255, 0.15);
+  padding: 8px 16px;
+  border-radius: 3px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .dept-back-btn:hover {
-  color: var(--t-hi);
-  border-color: var(--t-mid);
+  color: rgba(255, 255, 255, 0.9);
+  border-color: rgba(255, 255, 255, 0.3);
   background: rgba(255, 255, 255, 0.08);
 }
 

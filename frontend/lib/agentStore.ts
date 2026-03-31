@@ -205,7 +205,7 @@ interface SimStore {
   tick:           (dt: number) => void
   triggerMeeting: () => void
   endMeeting:     () => void
-  addLog:         (msg: string, type?: LogEntry['type']) => void
+  addLog:         (msg: string, type?: LogEntry['type'], txHash?: string) => void
   fireBeam:       (fromId: string, toId: string) => void
   setView:        (view: ViewState) => void
   getDepartmentAgents: (dept: ZoneName) => AgentRuntime[]
@@ -329,13 +329,13 @@ export const useAgentStore = create<SimStore>((set, get) => ({
     set(st => ({ agentInventory: [...st.agentInventory, agent] }))
   },
 
-  addLog(msg, type = 'info') {
+  addLog(msg, type = 'info', txHash?: string) {
     const { simTime } = get()
     const m = Math.floor(simTime / 60)
     const s = Math.floor(simTime % 60)
     const ts = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
     set(st => ({
-      log: [{ id: ++logCounter, timestamp: ts, message: msg, type }, ...st.log].slice(0, 50)
+      log: [{ id: ++logCounter, timestamp: ts, message: msg, type, txHash }, ...st.log].slice(0, 50)
     }))
   },
 

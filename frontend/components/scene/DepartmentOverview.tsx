@@ -8,12 +8,11 @@
  */
 
 import { useEffect, useRef } from 'react'
-import dynamic from 'next/dynamic'
 import { gsap } from 'gsap'
 import { useAgentStore, DEPARTMENT_CONFIGS } from '@/lib/agentStore'
 import type { ZoneName } from '@/lib/types'
-
-const RobotPanel = dynamic(() => import('@/components/ui/RobotPanel'), { ssr: false })
+import CommunicationLog from '@/components/ui/CommunicationLog'
+import { useCommunication } from '@/lib/useCommunication'
 
 const DEPARTMENTS: ZoneName[] = ['INTAKE', 'STORAGE', 'STAGING', 'DISPATCH']
 
@@ -26,9 +25,10 @@ const STATE_COLORS: Record<string, string> = {
 }
 
 export default function DepartmentOverview() {
-  const setView  = useAgentStore(s => s.setView)
-  const agents   = useAgentStore(s => s.agents)
-  const cardsRef = useRef<HTMLDivElement>(null)
+  const setView    = useAgentStore(s => s.setView)
+  const agents     = useAgentStore(s => s.agents)
+  const cardsRef   = useRef<HTMLDivElement>(null)
+  const { commLog } = useCommunication()
 
   useEffect(() => {
     if (!cardsRef.current) return
@@ -123,9 +123,29 @@ export default function DepartmentOverview() {
         {/* ── DIVIDER ── */}
         <div className="dept-divider" />
 
-        {/* ── RIGHT: robot ── */}
-        <div className="dept-right">
-          <RobotPanel />
+        {/* ── RIGHT: comm log ── */}
+        <div className="dept-right" style={{ alignItems: 'stretch', paddingTop: '0', maxHeight: '80vh', overflow: 'hidden' }}>
+          {commLog.length > 0
+            ? <CommunicationLog entries={commLog} embedded />
+            : (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                gap: '12px',
+                opacity: 0.3,
+              }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>
+                  03 — Comm Log
+                </span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'rgba(255,255,255,0.25)', letterSpacing: '0.06em' }}>
+                  Waiting for agents…
+                </span>
+              </div>
+            )
+          }
         </div>
 
       </div>

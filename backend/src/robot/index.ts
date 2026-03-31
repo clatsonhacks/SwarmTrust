@@ -118,6 +118,22 @@ resourceServer.onAfterSettle(async (ctx) => {
   log.info({ payer: ctx.result.payer, amount: amountUsdc, txHash: ctx.result.transaction }, 'Payment received');
   state.usdcBalance = (parseFloat(state.usdcBalance) + parseFloat(amountUsdc)).toFixed(6);
   await setRobotState(redis, state);
+
+  // Publish so the frontend can show a Basescan-verifiable VERIFY link
+  if (ctx.result.transaction) {
+    await publishEvent(redis, {
+      robotId,
+      type: 'PAYMENT_RECEIVED',
+      state: state.behaviorState,
+      taskId: null,
+      payload: {
+        from: ctx.result.payer ?? 'unknown',
+        amountUsdc,
+        txHash: ctx.result.transaction,
+      },
+      timestamp: Date.now(),
+    });
+  }
 });
 
 // ── Execute a subtask on this robot ───────────────────────────────────────────
