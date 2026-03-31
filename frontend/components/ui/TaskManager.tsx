@@ -1,18 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useAgentStore, type Zone } from '@/lib/agentStore'
-
-export interface Task {
-  taskId: string
-  description: string
-  sourceZone: Zone
-  destinationZone: Zone
-  priority: 'low' | 'normal' | 'high' | 'urgent'
-  assignedTo?: string
-  status: 'pending' | 'executing' | 'completed' | 'failed'
-  createdAt: Date
-}
+import { useAgentStore, type Task, type Zone } from '@/lib/agentStore'
 
 interface TaskManagerProps {
   onTaskCreate: (task: Omit<Task, 'taskId' | 'createdAt' | 'status'>) => void

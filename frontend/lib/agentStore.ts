@@ -147,11 +147,14 @@ export interface ActiveComm {
 }
 
 // Task management
+// Zone type for task creation (includes all backend zones)
+export type Zone = 'INTAKE' | 'STORAGE' | 'SORTING' | 'STAGING' | 'DISPATCH' | 'CHARGING'
+
 export interface Task {
   taskId: string
   description: string
-  sourceZone: ZoneName
-  destinationZone: ZoneName
+  sourceZone: Zone
+  destinationZone: Zone
   priority: 'low' | 'normal' | 'high' | 'urgent'
   assignedTo?: string
   status: 'pending' | 'executing' | 'completed' | 'failed'
