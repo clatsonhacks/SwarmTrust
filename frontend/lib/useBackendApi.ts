@@ -11,7 +11,7 @@
  */
 
 import { useState, useCallback } from 'react'
-import type { ZoneName as Zone } from './types'
+import type { Zone } from './agentStore'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000'
 
