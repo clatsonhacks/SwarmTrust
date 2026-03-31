@@ -26,6 +26,24 @@ const ROBOT_TO_AGENT: Record<string, string> = {
   'lifter-5':  'R5',
 }
 
+// Robot display colors
+const ROBOT_COLOR: Record<string, string> = {
+  'scout-1':   '#5cc8ff',
+  'lifter-2':  '#c5ff2b',
+  'scout-3':   '#cc44ff',
+  'carrier-4': '#ff9b2b',
+  'lifter-5':  '#ff4466',
+}
+
+// State → human label + color
+const STATE_LABEL: Record<string, { label: string; color: string }> = {
+  IDLE:            { label: 'standing by',        color: 'rgba(255,255,255,0.4)' },
+  MOVING:          { label: 'navigating',          color: '#5cc8ff' },
+  EXECUTING:       { label: 'executing task',      color: '#ff9b2b' },
+  WAITING:         { label: 'waiting',             color: '#cc44ff' },
+  WAITING_PAYMENT: { label: 'awaiting payment',    color: '#ff9b2b' },
+}
+
 // Backend RobotBehaviorState → frontend AgentState
 const STATE_MAP: Record<string, AgentState> = {
   IDLE:            'IDLE',
@@ -40,6 +58,8 @@ type WsMsg = { type: string; [key: string]: unknown }
 export function useBackendSocket() {
   const wsRef            = useRef<WebSocket | null>(null)
   const reconnectRef     = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Track last logged state per robot to suppress duplicate state-change logs
+  const lastStateRef     = useRef<Map<string, string>>(new Map())
 
   useEffect(() => {
     function connect() {
@@ -77,18 +97,34 @@ export function useBackendSocket() {
             const agentId = ROBOT_TO_AGENT[robotId]
             const backendState = msg.state as string
             const behaviorState = backendState as any
+            const taskId = (msg.taskId as string | null) ?? null
+            const rc = ROBOT_COLOR[robotId] ?? '#ffffff'
+            const sl = STATE_LABEL[backendState]
 
             // Update inventory
             store.updateAgentInventoryItem(robotId, {
               behaviorState,
-              currentTaskId: (msg.taskId as string | null) ?? null,
+              currentTaskId: taskId,
               lastUpdated: Date.now()
             })
 
             // Update 3D agents if mapped
             if (agentId) {
               const state = STATE_MAP[backendState] ?? 'IDLE'
-              store.setAgentState(agentId, state, (msg.taskId as string | null) ?? '')
+              store.setAgentState(agentId, state, taskId ?? '')
+            }
+
+            // Log meaningful state transitions — deduplicate same state per robot
+            const lastState = lastStateRef.current.get(robotId)
+            const stateKey = `${backendState}:${taskId ?? ''}`
+            if (backendState !== 'IDLE' && sl && stateKey !== lastState) {
+              lastStateRef.current.set(robotId, stateKey)
+              store.addLog(
+                `<b style="color:${rc}">${robotId}</b>` +
+                ` · <span style="color:${sl.color}">${sl.label}</span>` +
+                (taskId ? ` · <span style="color:rgba(255,255,255,0.35)">${taskId}</span>` : ''),
+                'info',
+              )
             }
             break
           }
@@ -97,9 +133,12 @@ export function useBackendSocket() {
           case 'TASK_ASSIGNED': {
             const taskId = msg.taskId as string
             const robotId = msg.robotId as string
+            const rc = ROBOT_COLOR[robotId] ?? '#ffffff'
             store.updateTaskStatus(taskId, 'executing')
             store.addLog(
-              `<b class="acc">→ ASSIGNED</b> · ${taskId} → ${robotId}`,
+              `<b class="acc">TASK</b>` +
+              ` · <b style="color:${rc}">${robotId}</b>` +
+              ` picked up <span style="color:rgba(255,255,255,0.5)">${taskId}</span>`,
               'info',
             )
             break
@@ -111,11 +150,14 @@ export function useBackendSocket() {
             const robotId = msg.robotId as string
             const taskId = msg.taskId as string
             const agentId = ROBOT_TO_AGENT[robotId]
+            const rc = ROBOT_COLOR[robotId] ?? '#ffffff'
 
             if (agentId) store.setAgentState(agentId, 'IDLE', '')
             store.updateTaskStatus(taskId, 'completed')
             store.addLog(
-              `<b class="acc">✓ DONE</b> · ${robotId} · ${taskId}`,
+              `<b style="color:#1aff88">✓ COMPLETE</b>` +
+              ` · <b style="color:${rc}">${robotId}</b>` +
+              ` · <span style="color:rgba(255,255,255,0.4)">${taskId}</span>`,
               'info',
             )
             break

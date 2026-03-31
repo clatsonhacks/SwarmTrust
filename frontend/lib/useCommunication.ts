@@ -5,6 +5,15 @@ import { useAgentStore } from './agentStore'
 import type { CommEntry } from '@/components/ui/CommunicationLog'
 import type { Toast } from '@/components/ui/ToastNotification'
 
+// Robot ID → zone (for when agentInventory hasn't loaded zone yet)
+const ROBOT_ZONE: Record<string, string> = {
+  'scout-1':   'INTAKE',
+  'lifter-5':  'INTAKE',
+  'lifter-2':  'STORAGE',
+  'scout-3':   'STAGING',
+  'carrier-4': 'DISPATCH',
+}
+
 const COMM_INTERVAL = { min: 4000, max: 8000 }
 const COMM_DURATION = 2000
 
@@ -125,12 +134,13 @@ export function useCommunication() {
           id: entryId,
           from: fromAgent.robotId,
           to: toAgent.robotId,
-          fromZone: (fromAgent.zone || 'STORAGE') as any,
-          toZone: (toAgent.zone || 'STORAGE') as any,
+          fromZone: (fromAgent.zone || ROBOT_ZONE[fromAgent.robotId] || 'INTAKE') as any,
+          toZone: (toAgent.zone || ROBOT_ZONE[toAgent.robotId] || 'INTAKE') as any,
           message: 'Task delegation via x402 payment',
           timestamp: new Date(),
           color: '#60a5fa',
           txHash: latestLog.txHash,
+          entryType: 'delegation',
         }
 
         setCommLog(prev => [entry, ...prev])
@@ -150,8 +160,10 @@ export function useCommunication() {
     // Parse payment events: "x402 · from → to · $X.XX USDC"
     // "from" may be a robotId (PAYMENT_SENT) or a wallet address (PAYMENT_RECEIVED)
     const paymentMatch = latestLog.message.match(/x402.*?<b.*?>(.+?)<\/b>.*?<b.*?>(.+?)<\/b>/)
+    const amountMatch  = latestLog.message.match(/\$(\d+\.?\d*)\s*USDC/)
     if (paymentMatch && latestLog.type === 'payment' && !delegateMatch) {
       const [, from, to] = paymentMatch
+      const amount = amountMatch?.[1] ?? undefined
       const fromAgent = agentInventory.find(a => a.robotId === from)
       const toAgent   = agentInventory.find(a => a.robotId === to)
 
@@ -166,9 +178,9 @@ export function useCommunication() {
 
         // from may be a wallet address when it's a PAYMENT_RECEIVED event
         const fromDisplay = fromAgent?.robotId ?? `${from.slice(0, 6)}…${from.slice(-4)}`
-        const fromZone    = (fromAgent?.zone || toAgent?.zone || 'STORAGE') as any
+        const fromZone    = (fromAgent?.zone || ROBOT_ZONE[fromAgent?.robotId ?? ''] || toAgent?.zone || ROBOT_ZONE[toAgent?.robotId ?? ''] || 'INTAKE') as any
         const toDisplay   = toAgent?.robotId ?? to
-        const toZone      = (toAgent?.zone || 'STORAGE') as any
+        const toZone      = (toAgent?.zone || ROBOT_ZONE[toAgent?.robotId ?? ''] || 'INTAKE') as any
 
         const entry: CommEntry = {
           id: entryId,
@@ -180,6 +192,8 @@ export function useCommunication() {
           timestamp: new Date(),
           color: '#10b981',
           txHash: latestLog.txHash,
+          amount,
+          entryType: 'payment',
         }
 
         setCommLog(prev => [entry, ...prev])
@@ -192,11 +206,13 @@ export function useCommunication() {
           id: entryId,
           from: fromAgent.robotId,
           to: toAgent.robotId,
-          fromZone: (fromAgent.zone || 'STORAGE') as any,
-          toZone: (toAgent.zone || 'STORAGE') as any,
+          fromZone: (fromAgent.zone || ROBOT_ZONE[fromAgent.robotId] || 'INTAKE') as any,
+          toZone: (toAgent.zone || ROBOT_ZONE[toAgent.robotId] || 'INTAKE') as any,
           message: 'USDC payment transfer',
           timestamp: new Date(),
           color: '#10b981',
+          amount,
+          entryType: 'payment',
         }
 
         setCommLog(prev => [entry, ...prev])

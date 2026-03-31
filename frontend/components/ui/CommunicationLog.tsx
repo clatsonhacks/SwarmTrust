@@ -16,6 +16,8 @@ export interface CommEntry {
   timestamp: Date
   color: string
   txHash?: string
+  amount?: string           // e.g. "0.01"
+  entryType?: 'payment' | 'delegation' | 'comm'
 }
 
 interface CommunicationLogProps {
@@ -73,32 +75,34 @@ export default function CommunicationLog({ entries, embedded = false }: Communic
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
-          gap: '2px',
-          paddingTop: '16px',
+          paddingTop: '8px',
         }}>
           {entries.slice(0, 30).map((entry) => {
             const time = entry.timestamp.toLocaleTimeString('en-US', {
               hour12: false, hour: '2-digit', minute: '2-digit',
             })
+            const isPayment = entry.entryType === 'payment' || !!entry.amount
+            const isDelegation = entry.entryType === 'delegation'
 
             return (
               <div
                 key={entry.id}
                 style={{
-                  padding: '14px 0',
-                  borderBottom: '0.5px solid rgba(255,255,255,0.04)',
+                  padding: '16px 0',
+                  borderBottom: '0.5px solid rgba(255,255,255,0.05)',
                 }}
               >
-                {/* From → To + timestamp */}
+                {/* Row 1: dot + FROM → TO + time */}
                 <div style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  marginBottom: '6px',
+                  marginBottom: '10px',
                 }}>
                   <span style={{
-                    width: '7px', height: '7px', borderRadius: '50%',
+                    width: '6px', height: '6px', borderRadius: '50%',
                     background: entry.color, flexShrink: 0,
+                    boxShadow: `0 0 6px ${entry.color}`,
                   }} />
                   <span style={{
                     fontFamily: 'var(--font-mono)',
@@ -106,21 +110,18 @@ export default function CommunicationLog({ entries, embedded = false }: Communic
                     letterSpacing: '0.1em',
                     color: entry.color,
                     textTransform: 'uppercase',
-                    fontWeight: 600,
+                    fontWeight: 700,
                   }}>
                     {entry.from}
                   </span>
-                  <span style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '11px',
-                    color: 'rgba(255,255,255,0.25)',
-                  }}>→</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'rgba(255,255,255,0.2)' }}>→</span>
                   <span style={{
                     fontFamily: 'var(--font-mono)',
                     fontSize: '11px',
                     letterSpacing: '0.1em',
-                    color: 'rgba(255,255,255,0.65)',
+                    color: 'rgba(255,255,255,0.7)',
                     textTransform: 'uppercase',
+                    fontWeight: 600,
                   }}>
                     {entry.to}
                   </span>
@@ -129,28 +130,55 @@ export default function CommunicationLog({ entries, embedded = false }: Communic
                     fontFamily: 'var(--font-mono)',
                     fontSize: '10px',
                     color: 'rgba(255,255,255,0.25)',
-                    letterSpacing: '0.06em',
                     flexShrink: 0,
                   }}>
                     {time}
                   </span>
                 </div>
 
-                {/* Message + Basescan link */}
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '12px',
-                  marginBottom: '5px',
-                }}>
+                {/* Row 2: big bold main value */}
+                <div style={{ marginBottom: '8px' }}>
+                  {isPayment && entry.amount ? (
+                    <span style={{
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: '22px',
+                      fontWeight: 700,
+                      color: '#ffffff',
+                      letterSpacing: '-0.01em',
+                    }}>
+                      ${entry.amount} <span style={{ fontSize: '14px', color: '#1aff88', fontWeight: 600 }}>USDC</span>
+                    </span>
+                  ) : isDelegation ? (
+                    <span style={{
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: '18px',
+                      fontWeight: 700,
+                      color: '#ffffff',
+                    }}>
+                      Task delegated
+                    </span>
+                  ) : (
+                    <span style={{
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: '16px',
+                      fontWeight: 600,
+                      color: '#ffffff',
+                    }}>
+                      {entry.message}
+                    </span>
+                  )}
+                </div>
+
+                {/* Row 3: zone route + verify */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{
                     fontFamily: 'var(--font-mono)',
-                    fontSize: '12px',
-                    color: 'rgba(255,255,255,0.5)',
-                    letterSpacing: '0.03em',
+                    fontSize: '10px',
+                    letterSpacing: '0.12em',
+                    color: 'rgba(255,255,255,0.3)',
+                    textTransform: 'uppercase',
                   }}>
-                    {entry.message}
+                    {entry.fromZone} → {entry.toZone}
                   </span>
                   {isValidTxHash(entry.txHash) ? (
                     <a
@@ -164,28 +192,16 @@ export default function CommunicationLog({ entries, embedded = false }: Communic
                         color: 'var(--accent)',
                         textDecoration: 'none',
                         flexShrink: 0,
-                        opacity: 0.85,
                         border: '0.5px solid rgba(197,255,43,0.3)',
-                        padding: '2px 8px',
+                        padding: '3px 10px',
                         borderRadius: '2px',
                       }}
-                      onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-                      onMouseLeave={e => (e.currentTarget.style.opacity = '0.85')}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(197,255,43,0.08)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                     >
                       VERIFY ↗
                     </a>
                   ) : null}
-                </div>
-
-                {/* Zones */}
-                <div style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '9px',
-                  letterSpacing: '0.14em',
-                  color: 'rgba(255,255,255,0.2)',
-                  textTransform: 'uppercase',
-                }}>
-                  {entry.fromZone} → {entry.toZone}
                 </div>
               </div>
             )
