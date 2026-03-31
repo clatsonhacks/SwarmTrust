@@ -130,6 +130,7 @@ export function useCommunication() {
           message: 'Task delegation via x402 payment',
           timestamp: new Date(),
           color: '#60a5fa',
+          txHash: latestLog.txHash,
         }
 
         setCommLog(prev => [entry, ...prev])
@@ -146,17 +147,45 @@ export function useCommunication() {
       }
     }
 
-    // Parse payment events: "x402 · robotId → robotId · $X.XX USDC"
+    // Parse payment events: "x402 · from → to · $X.XX USDC"
+    // "from" may be a robotId (PAYMENT_SENT) or a wallet address (PAYMENT_RECEIVED)
     const paymentMatch = latestLog.message.match(/x402.*?<b.*?>(.+?)<\/b>.*?<b.*?>(.+?)<\/b>/)
     if (paymentMatch && latestLog.type === 'payment' && !delegateMatch) {
       const [, from, to] = paymentMatch
       const fromAgent = agentInventory.find(a => a.robotId === from)
-      const toAgent = agentInventory.find(a => a.robotId === to)
+      const toAgent   = agentInventory.find(a => a.robotId === to)
 
-      if (fromAgent && toAgent) {
+      // Only create entry if we have a real on-chain txHash (skip JWT payment receipts)
+      const hasRealTx = typeof latestLog.txHash === 'string'
+        && latestLog.txHash.startsWith('0x')
+        && latestLog.txHash.length >= 20
+
+      if (hasRealTx) {
         const entryId = `comm-payment-${latestLog.id}`
+        if (commLog.find(c => c.id === entryId)) return
 
-        // Check if already exists
+        // from may be a wallet address when it's a PAYMENT_RECEIVED event
+        const fromDisplay = fromAgent?.robotId ?? `${from.slice(0, 6)}…${from.slice(-4)}`
+        const fromZone    = (fromAgent?.zone || toAgent?.zone || 'STORAGE') as any
+        const toDisplay   = toAgent?.robotId ?? to
+        const toZone      = (toAgent?.zone || 'STORAGE') as any
+
+        const entry: CommEntry = {
+          id: entryId,
+          from: fromDisplay,
+          to: toDisplay,
+          fromZone,
+          toZone,
+          message: 'USDC payment transfer',
+          timestamp: new Date(),
+          color: '#10b981',
+          txHash: latestLog.txHash,
+        }
+
+        setCommLog(prev => [entry, ...prev])
+      } else if (fromAgent && toAgent) {
+        // No real txHash — still show the payment entry, just without VERIFY link
+        const entryId = `comm-payment-${latestLog.id}`
         if (commLog.find(c => c.id === entryId)) return
 
         const entry: CommEntry = {

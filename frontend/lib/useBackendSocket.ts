@@ -137,6 +137,22 @@ export function useBackendSocket() {
               ` → <b style="color:${toAgent?.color ?? '#fff'}">${payload.to}</b>` +
               ` · $${payload.amountUsdc} USDC`,
               'payment',
+              payload.txHash,
+            )
+            break
+          }
+
+          // Backend publishes RobotEvent with type='PAYMENT_RECEIVED', payload={from, amountUsdc, txHash}
+          case 'PAYMENT_RECEIVED': {
+            const payload  = msg.payload as { from: string; amountUsdc: string; txHash: string }
+            const toAgent  = store.agents.find(a => a.id === ROBOT_TO_AGENT[msg.robotId as string])
+            store.addLog(
+              `<b class="pay">x402</b> · ` +
+              `<b style="color:rgba(255,255,255,0.7)">${payload.from.slice(0, 6)}…${payload.from.slice(-4)}</b>` +
+              ` → <b style="color:${toAgent?.color ?? '#fff'}">${msg.robotId}</b>` +
+              ` · $${payload.amountUsdc} USDC`,
+              'payment',
+              payload.txHash,
             )
             break
           }

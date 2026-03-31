@@ -43,6 +43,13 @@
 }
 
 /* ═══════════════════════════════════════════════
+   AGENT LOG HTML CLASS COLOURS
+   Used by dangerouslySetInnerHTML log entries
+═══════════════════════════════════════════════ */
+.acc { color: var(--accent); }
+.pay { color: #60a5fa; }
+
+/* ═══════════════════════════════════════════════
    RESET & BASE
 ═══════════════════════════════════════════════ */
 *, *::before, *::after {
@@ -816,7 +823,9 @@ body.cursor-hover .c-ring {
 ═══════════════════════════════════════════════ */
 .dept-overview {
   width: 100%;
-  min-height: 100vh;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
   background: var(--bg);
   display: flex;
   align-items: stretch;
@@ -829,6 +838,8 @@ body.cursor-hover .c-ring {
   max-width: 1400px;
   margin: 0 auto;
   gap: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .dept-left {

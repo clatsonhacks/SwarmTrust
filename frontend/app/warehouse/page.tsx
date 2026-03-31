@@ -126,9 +126,6 @@ export default function WarehousePage() {
         onClose={() => setAlertOpen(false)}
       />
 
-      {/* Communication Log */}
-      <CommunicationLog entries={commLog} />
-
       {/* Task Manager */}
       <TaskManager tasks={tasks} onTaskCreate={handleTaskCreate} />
 

@@ -28,6 +28,7 @@ export interface LogEntry {
   timestamp: string   // "MM:SS"
   message:   string   // HTML string
   type:      'info' | 'payment' | 'chain' | 'meeting'
+  txHash?:   string   // on-chain tx hash for Basescan links
 }
 
 export interface ZoneDef {
