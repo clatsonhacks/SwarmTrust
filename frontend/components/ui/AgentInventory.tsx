@@ -89,11 +89,11 @@ export default function AgentInventory({ isOpen, onClose, agents, onSpawnAgent }
             display: 'flex', alignItems: 'center', gap: '16px',
             flexShrink: 0,
           }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.8)', fontWeight: 700 }}>
               Agent Inventory
             </span>
             <span style={{ flex: 1, height: '0.5px', background: 'rgba(255,255,255,0.06)' }} />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--accent)' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--accent)', fontWeight: 700 }}>
               {agents.length} agents
             </span>
             <button
@@ -137,10 +137,10 @@ export default function AgentInventory({ isOpen, onClose, agents, onSpawnAgent }
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#ece7de', fontWeight: 600, letterSpacing: '0.06em' }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: '#ffffff', fontWeight: 700, letterSpacing: '0.06em' }}>
                         {ag.robotId}
                       </span>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '7px', letterSpacing: '0.12em', padding: '2px 7px', background: meta.bg, color: meta.color, borderRadius: '2px' }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '0.12em', padding: '3px 8px', background: meta.bg, color: meta.color, borderRadius: '2px', fontWeight: 700 }}>
                         {ag.behaviorState}
                       </span>
                     </div>
@@ -148,8 +148,8 @@ export default function AgentInventory({ isOpen, onClose, agents, onSpawnAgent }
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '10px' }}>
                       {(ag.capabilities || []).map(cap => (
                         <span key={cap} style={{
-                          fontFamily: 'var(--font-mono)', fontSize: '8px', letterSpacing: '0.08em',
-                          padding: '2px 6px',
+                          fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '0.08em',
+                          padding: '3px 8px',
                           border: `0.5px solid ${CAPABILITY_COLORS[cap] ?? 'rgba(255,255,255,0.2)'}`,
                           color: CAPABILITY_COLORS[cap] ?? 'rgba(255,255,255,0.5)',
                           borderRadius: '2px',
@@ -161,17 +161,17 @@ export default function AgentInventory({ isOpen, onClose, agents, onSpawnAgent }
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '10px', borderTop: '0.5px solid rgba(255,255,255,0.06)' }}>
                       <div>
-                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '7px', color: 'rgba(255,255,255,0.3)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '2px' }}>REP</div>
-                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: '#ece7de' }}>{ag.reputationScore}</div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '3px' }}>REP</div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '15px', color: '#ffffff', fontWeight: 700 }}>{ag.reputationScore}</div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '7px', color: 'rgba(255,255,255,0.3)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '2px' }}>USDC</div>
-                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: '#1aff88' }}>{parseFloat(ag.usdcBalance).toFixed(2)}</div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '3px' }}>USDC</div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '15px', color: '#1aff88', fontWeight: 700 }}>{parseFloat(ag.usdcBalance).toFixed(2)}</div>
                       </div>
                       {ag.zone && (
                         <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '7px', color: 'rgba(255,255,255,0.3)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '2px' }}>ZONE</div>
-                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'rgba(255,255,255,0.55)' }}>{ag.zone}</div>
+                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '3px' }}>ZONE</div>
+                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'rgba(255,255,255,0.75)' }}>{ag.zone}</div>
                         </div>
                       )}
                     </div>
@@ -188,7 +188,7 @@ export default function AgentInventory({ isOpen, onClose, agents, onSpawnAgent }
             {/* Detail panel */}
             {agent && (
               <div style={{ width: '300px', flexShrink: 0, borderLeft: '0.5px solid rgba(255,255,255,0.06)', padding: '20px', overflowY: 'auto' }}>
-                <p style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', marginBottom: '20px' }}>
+                <p style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.8)', fontWeight: 700, marginBottom: '20px' }}>
                   Agent Details
                 </p>
 
@@ -202,8 +202,8 @@ export default function AgentInventory({ isOpen, onClose, agents, onSpawnAgent }
                   { label: 'Wallet',      value: agent.walletAddress ? `${agent.walletAddress.slice(0,6)}…${agent.walletAddress.slice(-4)}` : '—' },
                 ].map(({ label, value }) => (
                   <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '8px 0', borderBottom: '0.5px solid rgba(255,255,255,0.05)' }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '8px', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)' }}>{label}</span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: '#ece7de', textAlign: 'right', maxWidth: '160px', wordBreak: 'break-all' }}>{value}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>{label}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: '#ffffff', textAlign: 'right', maxWidth: '160px', wordBreak: 'break-all', fontWeight: 600 }}>{value}</span>
                   </div>
                 ))}
 
@@ -214,17 +214,17 @@ export default function AgentInventory({ isOpen, onClose, agents, onSpawnAgent }
 
                 {/* Capabilities */}
                 <div style={{ marginTop: '20px' }}>
-                  <p style={{ fontFamily: 'var(--font-mono)', fontSize: '8px', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', marginBottom: '10px' }}>Capabilities</p>
+                  <p style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)', fontWeight: 700, marginBottom: '12px' }}>Capabilities</p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     {(agent.capabilities || []).map(cap => (
                       <div key={cap} style={{
                         display: 'flex', alignItems: 'center', gap: '10px',
-                        padding: '8px 10px',
+                        padding: '10px 12px',
                         background: 'rgba(255,255,255,0.02)',
                         border: `0.5px solid ${CAPABILITY_COLORS[cap] ?? 'rgba(255,255,255,0.1)'}`,
                         borderRadius: '3px',
                       }}>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: CAPABILITY_COLORS[cap] ?? '#ece7de' }}>{cap}</span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: CAPABILITY_COLORS[cap] ?? '#ffffff', fontWeight: 700 }}>{cap}</span>
                       </div>
                     ))}
                   </div>

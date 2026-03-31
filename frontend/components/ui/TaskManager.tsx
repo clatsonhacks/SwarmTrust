@@ -39,14 +39,25 @@ const STATUS_COLORS: Record<string, string> = {
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
-  padding: '10px 12px',
-  background: 'rgba(255,255,255,0.04)',
-  border: '0.5px solid rgba(255,255,255,0.12)',
+  padding: '12px 14px',
+  background: 'rgba(255,255,255,0.05)',
+  border: '0.5px solid rgba(255,255,255,0.18)',
   borderRadius: '4px',
-  color: '#ece7de',
-  fontSize: '13px',
-  fontFamily: 'var(--font-mono)',
+  color: '#ffffff',
+  fontSize: '15px',
+  fontFamily: 'var(--font-sans)',
   outline: 'none',
+}
+
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  fontFamily: 'var(--font-mono)',
+  fontSize: '10px',
+  letterSpacing: '0.18em',
+  textTransform: 'uppercase' as const,
+  color: 'rgba(255,255,255,0.55)',
+  marginBottom: '8px',
+  fontWeight: 600,
 }
 
 export default function TaskManager({ isOpen, onClose, onTaskCreate, tasks }: TaskManagerProps) {
@@ -94,30 +105,30 @@ export default function TaskManager({ isOpen, onClose, onTaskCreate, tasks }: Ta
       >
         {/* Header */}
         <div style={{
-          padding: '16px 24px',
-          borderBottom: '0.5px solid rgba(255,255,255,0.08)',
+          padding: '18px 28px',
+          borderBottom: '0.5px solid rgba(255,255,255,0.1)',
           display: 'flex', alignItems: 'center', gap: '16px',
         }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.8)', fontWeight: 700 }}>
             Task Manager
           </span>
-          <span style={{ flex: 1, height: '0.5px', background: 'rgba(255,255,255,0.06)' }} />
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--accent)' }}>
+          <span style={{ flex: 1, height: '0.5px', background: 'rgba(255,255,255,0.08)' }} />
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--accent)', fontWeight: 700 }}>
             {tasks.filter(t => t.status === 'pending').length} pending
           </span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: '16px', padding: '0 0 0 12px', lineHeight: 1 }}>✕</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: '18px', padding: '0 0 0 16px', lineHeight: 1 }}>✕</button>
         </div>
 
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
           {/* Create form */}
-          <form onSubmit={handleSubmit} style={{ width: '340px', flexShrink: 0, padding: '24px', borderRight: '0.5px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
-            <p style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', margin: 0 }}>
+          <form onSubmit={handleSubmit} style={{ width: '380px', flexShrink: 0, padding: '28px', borderRight: '0.5px solid rgba(255,255,255,0.07)', display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto' }}>
+            <p style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.7)', fontWeight: 700, margin: 0 }}>
               New Task
             </p>
 
             <div>
-              <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: '8px', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', marginBottom: '6px' }}>Description</label>
+              <label style={labelStyle}>Description</label>
               <input
                 style={inputStyle}
                 type="text"
@@ -130,14 +141,14 @@ export default function TaskManager({ isOpen, onClose, onTaskCreate, tasks }: Ta
 
             <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
               <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: '8px', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', marginBottom: '6px' }}>From</label>
+                <label style={labelStyle}>From</label>
                 <select style={inputStyle} value={sourceZone} onChange={e => setSourceZone(e.target.value as Zone)}>
                   {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
                 </select>
               </div>
-              <span style={{ fontFamily: 'var(--font-mono)', color: 'rgba(255,255,255,0.25)', paddingBottom: '10px' }}>→</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '18px', color: 'rgba(255,255,255,0.4)', paddingBottom: '12px' }}>→</span>
               <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: '8px', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', marginBottom: '6px' }}>To</label>
+                <label style={labelStyle}>To</label>
                 <select style={inputStyle} value={destinationZone} onChange={e => setDestinationZone(e.target.value as Zone)}>
                   {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
                 </select>
@@ -146,7 +157,7 @@ export default function TaskManager({ isOpen, onClose, onTaskCreate, tasks }: Ta
 
             <div style={{ display: 'flex', gap: '10px' }}>
               <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: '8px', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', marginBottom: '6px' }}>Priority</label>
+                <label style={labelStyle}>Priority</label>
                 <select style={inputStyle} value={priority} onChange={e => setPriority(e.target.value as any)}>
                   <option value="low">Low</option>
                   <option value="normal">Normal</option>
@@ -155,7 +166,7 @@ export default function TaskManager({ isOpen, onClose, onTaskCreate, tasks }: Ta
                 </select>
               </div>
               <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: '8px', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', marginBottom: '6px' }}>Agent</label>
+                <label style={labelStyle}>Agent</label>
                 <select style={inputStyle} value={assignedAgent} onChange={e => setAssignedAgent(e.target.value)}>
                   <option value="">Auto</option>
                   {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -165,13 +176,13 @@ export default function TaskManager({ isOpen, onClose, onTaskCreate, tasks }: Ta
 
             <button type="submit" style={{
               marginTop: 'auto',
-              padding: '11px',
+              padding: '14px',
               background: 'var(--accent)',
               border: 'none',
               borderRadius: '4px',
               color: '#070810',
               fontFamily: 'var(--font-mono)',
-              fontSize: '10px',
+              fontSize: '12px',
               letterSpacing: '0.18em',
               textTransform: 'uppercase',
               fontWeight: 700,
@@ -182,36 +193,36 @@ export default function TaskManager({ isOpen, onClose, onTaskCreate, tasks }: Ta
           </form>
 
           {/* Task list */}
-          <div style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
-            <p style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', margin: '0 0 16px 0' }}>
+          <div style={{ flex: 1, padding: '28px', overflowY: 'auto' }}>
+            <p style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.7)', fontWeight: 700, margin: '0 0 20px 0' }}>
               Active Tasks — {tasks.length}
             </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {tasks.slice(0, 20).map(task => (
                 <div key={task.taskId} style={{
-                  padding: '12px 14px',
+                  padding: '14px 16px',
                   background: 'rgba(255,255,255,0.02)',
-                  border: '0.5px solid rgba(255,255,255,0.07)',
+                  border: '0.5px solid rgba(255,255,255,0.08)',
                   borderLeft: `2px solid ${PRIORITY_COLORS[task.priority]}`,
                   borderRadius: '4px',
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '8px', letterSpacing: '0.1em', color: PRIORITY_COLORS[task.priority] }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '0.12em', color: PRIORITY_COLORS[task.priority], fontWeight: 700 }}>
                       {task.priority.toUpperCase()}
                     </span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '8px', color: 'rgba(255,255,255,0.3)' }}>{task.taskId}</span>
-                    <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: '8px', color: STATUS_COLORS[task.status] }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'rgba(255,255,255,0.4)' }}>{task.taskId}</span>
+                    <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: '10px', color: STATUS_COLORS[task.status], fontWeight: 700 }}>
                       {task.status}
                     </span>
                   </div>
-                  <div style={{ fontFamily: 'var(--font-sans)', fontSize: '13px', color: '#ece7de', marginBottom: '4px' }}>{task.description}</div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'rgba(255,255,255,0.35)' }}>
+                  <div style={{ fontFamily: 'var(--font-sans)', fontSize: '15px', color: '#ffffff', marginBottom: '6px', fontWeight: 500 }}>{task.description}</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'rgba(255,255,255,0.45)' }}>
                     {task.sourceZone} → {task.destinationZone}
                   </div>
                 </div>
               ))}
               {tasks.length === 0 && (
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'rgba(255,255,255,0.2)', textAlign: 'center', paddingTop: '40px' }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'rgba(255,255,255,0.3)', textAlign: 'center', paddingTop: '60px' }}>
                   No active tasks
                 </div>
               )}
